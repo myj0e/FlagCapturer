@@ -1,0 +1,22 @@
+# Git and local development environments
+.git/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Local credentials
+.env
+.env.*
+!.env.example
+.pypirc
+
+# Challenge inputs and run output must never enter an image build context
+data/
+runs/
+artifacts/
+reports/
+*.log
