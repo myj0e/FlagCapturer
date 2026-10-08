@@ -46,6 +46,9 @@ coverage.xml
 
 # Local CTF data: challenge attachments, flags, traces, and generated artifacts
 data/
+# Domain playbooks are source resources, not private challenge data.
+!src/ctfbot/packs/data/
+!src/ctfbot/packs/data/**
 runs/
 artifacts/
 reports/

@@ -1,0 +1,421 @@
+{
+  "schema_version": 1,
+  "source_commit": "f1c9531672c45b24b7fb5f3aa44a7ac33d3602f8",
+  "environment": "read-only PyYAML parse; no image pulls or containers started",
+  "reports": [
+    {
+      "id": "cry-super-curve",
+      "compose_file": "ctftiny/cry/super_curve/docker-compose.yml",
+      "services": [
+        {
+          "name": "game-server",
+          "images": [
+            "llmctf/2019q-cry-super_curve:latest"
+          ],
+          "build_context": null,
+          "mounts": [
+            {
+              "source": "/var/run/docker.sock",
+              "target": "/var/run/docker.sock",
+              "mode": ""
+            }
+          ],
+          "ports": [
+            {
+              "host_ip": null,
+              "published": "8000:8000",
+              "target": null
+            }
+          ],
+          "environment_keys": []
+        }
+      ],
+      "networks": [
+        {
+          "name": "ctfnet",
+          "external": true,
+          "internal": false,
+          "driver": null
+        }
+      ],
+      "risks": [
+        "docker_socket_mount",
+        "mutable_image_reference",
+        "network_not_internal",
+        "published_port_without_loopback_binding",
+        "shared_external_network"
+      ],
+      "safe_to_run_as_is": false
+    },
+    {
+      "id": "cry-the-lengths-we-extend-ourselves",
+      "compose_file": "ctftiny/cry/The Lengths we Extend Ourselves/docker-compose.yml",
+      "services": [
+        {
+          "name": "thelengthsweextendourselves-server",
+          "images": [
+            "llmctf/2022f-cry-the_lengths_we_extend_ourselves"
+          ],
+          "build_context": null,
+          "mounts": [
+            {
+              "source": "/var/run/docker.sock",
+              "target": "/var/run/docker.sock",
+              "mode": ""
+            }
+          ],
+          "ports": [
+            {
+              "host_ip": null,
+              "published": "5050:5050",
+              "target": null
+            }
+          ],
+          "environment_keys": []
+        }
+      ],
+      "networks": [
+        {
+          "name": "ctfnet",
+          "external": true,
+          "internal": false,
+          "driver": null
+        }
+      ],
+      "risks": [
+        "docker_socket_mount",
+        "mutable_image_reference",
+        "network_not_internal",
+        "published_port_without_loopback_binding",
+        "shared_external_network"
+      ],
+      "safe_to_run_as_is": false
+    },
+    {
+      "id": "pwn-puffin",
+      "compose_file": "ctftiny/pwn/puffin/docker-compose.yml",
+      "services": [
+        {
+          "name": "game-server",
+          "images": [
+            "llmctf/2023q-pwn-puffin:latest"
+          ],
+          "build_context": null,
+          "mounts": [
+            {
+              "source": "/var/run/docker.sock",
+              "target": "/var/run/docker.sock",
+              "mode": ""
+            }
+          ],
+          "ports": [
+            {
+              "host_ip": null,
+              "published": "31140:31140",
+              "target": null
+            }
+          ],
+          "environment_keys": []
+        }
+      ],
+      "networks": [
+        {
+          "name": "ctfnet",
+          "external": true,
+          "internal": false,
+          "driver": null
+        }
+      ],
+      "risks": [
+        "docker_socket_mount",
+        "mutable_image_reference",
+        "network_not_internal",
+        "published_port_without_loopback_binding",
+        "shared_external_network"
+      ],
+      "safe_to_run_as_is": false
+    },
+    {
+      "id": "pwn-bigboy",
+      "compose_file": "ctftiny/pwn/bigboy/docker-compose.yml",
+      "services": [
+        {
+          "name": "web",
+          "images": [
+            "llmctf/2018q-pwn-bigboi:latest"
+          ],
+          "build_context": null,
+          "mounts": [],
+          "ports": [
+            {
+              "host_ip": null,
+              "published": "1436:1436",
+              "target": null
+            }
+          ],
+          "environment_keys": []
+        }
+      ],
+      "networks": [
+        {
+          "name": "ctfnet",
+          "external": true,
+          "internal": false,
+          "driver": null
+        }
+      ],
+      "risks": [
+        "mutable_image_reference",
+        "network_not_internal",
+        "published_port_without_loopback_binding",
+        "shared_external_network"
+      ],
+      "safe_to_run_as_is": false
+    },
+    {
+      "id": "pwn-roppity",
+      "compose_file": "ctftiny/pwn/roppity/docker-compose.yml",
+      "services": [
+        {
+          "name": "web",
+          "images": [
+            "llmctf/2020q-pwn-roppity:latest"
+          ],
+          "build_context": null,
+          "mounts": [],
+          "ports": [
+            {
+              "host_ip": null,
+              "published": "8000:8000",
+              "target": null
+            }
+          ],
+          "environment_keys": []
+        }
+      ],
+      "networks": [
+        {
+          "name": "ctfnet",
+          "external": true,
+          "internal": false,
+          "driver": null
+        }
+      ],
+      "risks": [
+        "mutable_image_reference",
+        "network_not_internal",
+        "published_port_without_loopback_binding",
+        "shared_external_network"
+      ],
+      "safe_to_run_as_is": false
+    },
+    {
+      "id": "rev-maze",
+      "compose_file": "ctftiny/rev/maze/docker-compose.yml",
+      "services": [
+        {
+          "name": "game-server",
+          "images": [
+            "llmctf/2021f-rev-maze:latest"
+          ],
+          "build_context": null,
+          "mounts": [
+            {
+              "source": "/var/run/docker.sock",
+              "target": "/var/run/docker.sock",
+              "mode": ""
+            }
+          ],
+          "ports": [],
+          "environment_keys": []
+        }
+      ],
+      "networks": [
+        {
+          "name": "ctfnet",
+          "external": true,
+          "internal": false,
+          "driver": null
+        }
+      ],
+      "risks": [
+        "docker_socket_mount",
+        "mutable_image_reference",
+        "network_not_internal",
+        "shared_external_network"
+      ],
+      "safe_to_run_as_is": false
+    },
+    {
+      "id": "web-poem-collection",
+      "compose_file": "ctftiny/web/poem-collection/docker-compose.yml",
+      "services": [
+        {
+          "name": "game-server",
+          "images": [
+            "llmctf/2021q-web-poem_collection:latest"
+          ],
+          "build_context": null,
+          "mounts": [
+            {
+              "source": "/var/run/docker.sock",
+              "target": "/var/run/docker.sock",
+              "mode": ""
+            }
+          ],
+          "ports": [],
+          "environment_keys": []
+        }
+      ],
+      "networks": [
+        {
+          "name": "ctfnet",
+          "external": true,
+          "internal": false,
+          "driver": null
+        }
+      ],
+      "risks": [
+        "docker_socket_mount",
+        "mutable_image_reference",
+        "network_not_internal",
+        "shared_external_network"
+      ],
+      "safe_to_run_as_is": false
+    },
+    {
+      "id": "web-smug-dino",
+      "compose_file": "ctftiny/web/smug-dino/docker-compose.yml",
+      "services": [
+        {
+          "name": "smug-dino",
+          "images": [
+            "llmctf/2023q-web-smug_dino"
+          ],
+          "build_context": null,
+          "mounts": [],
+          "ports": [],
+          "environment_keys": []
+        }
+      ],
+      "networks": [
+        {
+          "name": "ctfnet",
+          "external": true,
+          "internal": false,
+          "driver": null
+        }
+      ],
+      "risks": [
+        "mutable_image_reference",
+        "network_not_internal",
+        "shared_external_network"
+      ],
+      "safe_to_run_as_is": false
+    },
+    {
+      "id": "web-shreeramquest",
+      "compose_file": "ctftiny/web/ShreeRamQuest/docker-compose.yml",
+      "services": [
+        {
+          "name": "mongo",
+          "images": [
+            "mongo:latest@sha256:7b88befc893008d7139ce3276c093b3efd435023af8bb76a9d79fa90be1eaeb6"
+          ],
+          "build_context": null,
+          "mounts": [],
+          "ports": [],
+          "environment_keys": [
+            "MONGO_INITDB_ROOT_PASSWORD",
+            "MONGO_INITDB_ROOT_USERNAME"
+          ]
+        },
+        {
+          "name": "nodeserver",
+          "images": [
+            "llmctf/2023f-web-shreeramquest-nodeserver:latest"
+          ],
+          "build_context": ".",
+          "mounts": [],
+          "ports": [],
+          "environment_keys": []
+        },
+        {
+          "name": "nginx",
+          "images": [
+            "llmctf/2023f-web-shreeramquest-nginx:latest"
+          ],
+          "build_context": "./nginx",
+          "mounts": [],
+          "ports": [
+            {
+              "host_ip": null,
+              "published": "8000:80",
+              "target": null
+            }
+          ],
+          "environment_keys": []
+        }
+      ],
+      "networks": [
+        {
+          "name": "shreeramquest",
+          "external": false,
+          "internal": false,
+          "driver": "bridge"
+        },
+        {
+          "name": "ctfnet",
+          "external": true,
+          "internal": false,
+          "driver": null
+        }
+      ],
+      "risks": [
+        "mutable_image_reference",
+        "network_not_internal",
+        "published_port_without_loopback_binding",
+        "shared_external_network"
+      ],
+      "safe_to_run_as_is": false
+    },
+    {
+      "id": "msc-showdown",
+      "compose_file": "ctftiny/msc/showdown/docker-compose.yml",
+      "services": [
+        {
+          "name": "showdown",
+          "images": [
+            "llmctf/2018f-msc-showdown"
+          ],
+          "build_context": "showdown_server",
+          "mounts": [
+            {
+              "source": "/var/run/docker.sock",
+              "target": "/var/run/docker.sock",
+              "mode": ""
+            }
+          ],
+          "ports": [],
+          "environment_keys": []
+        }
+      ],
+      "networks": [
+        {
+          "name": "ctfnet",
+          "external": true,
+          "internal": false,
+          "driver": null
+        }
+      ],
+      "risks": [
+        "docker_socket_mount",
+        "mutable_image_reference",
+        "network_not_internal",
+        "privileged_container",
+        "shared_external_network"
+      ],
+      "safe_to_run_as_is": false
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "name": "web",
+  "version": "1.0.0",
+  "labels": [
+    "web"
+  ],
+  "triggers": [
+    "HTTP",
+    "headers",
+    "cookies",
+    "response differences"
+  ],
+  "required_binaries": [
+    "python3"
+  ],
+  "optional_binaries": [],
+  "operations": [
+    "response"
+  ],
+  "network": "controller-granted TCP only",
+  "risk": "untrusted parser/executable runs only inside sandbox",
+  "sources": [
+    {
+      "component": "ctfbot authored wrappers and playbooks",
+      "source": "repository src/ctfbot/packs",
+      "license": "MIT"
+    },
+    {
+      "component": "Python and optional tools",
+      "source": "operator-provided immutable runtime image",
+      "license": "not redistributed by this pack; record runtime image inventory"
+    }
+  ],
+  "fixture_version": "authored-v1",
+  "coverage_status": "implemented; acceptance pending",
+  "tool_contract": "workflow_run(pack, operation, path); fixed argv, bounded timeout/output, raw evidence references; missing dependency returns nonzero/environment status"
+}

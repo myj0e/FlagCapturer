@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {"challenge_id": "example-crypto-a", "workspace": "/private/pilot/workspace/example-crypto-a", "oracle": "/private/pilot/private/example-crypto-a/oracle.json"},
+    {"challenge_id": "example-crypto-b", "workspace": "/private/pilot/workspace/example-crypto-b", "oracle": "/private/pilot/private/example-crypto-b/oracle.json"},
+    {"challenge_id": "example-crypto-c", "workspace": "/private/pilot/workspace/example-crypto-c", "oracle": "/private/pilot/private/example-crypto-c/oracle.json"},
+    {"challenge_id": "example-forensics-a", "workspace": "/private/pilot/workspace/example-forensics-a", "oracle": "/private/pilot/private/example-forensics-a/oracle.json"},
+    {"challenge_id": "example-forensics-b", "workspace": "/private/pilot/workspace/example-forensics-b", "oracle": "/private/pilot/private/example-forensics-b/oracle.json"},
+    {"challenge_id": "example-reverse-a", "workspace": "/private/pilot/workspace/example-reverse-a", "oracle": "/private/pilot/private/example-reverse-a/oracle.json"},
+    {"challenge_id": "example-reverse-b", "workspace": "/private/pilot/workspace/example-reverse-b", "oracle": "/private/pilot/private/example-reverse-b/oracle.json"},
+    {"challenge_id": "example-reverse-c", "workspace": "/private/pilot/workspace/example-reverse-c", "oracle": "/private/pilot/private/example-reverse-c/oracle.json"},
+    {"challenge_id": "example-misc-a", "workspace": "/private/pilot/workspace/example-misc-a", "oracle": "/private/pilot/private/example-misc-a/oracle.json"},
+    {"challenge_id": "example-misc-b", "workspace": "/private/pilot/workspace/example-misc-b", "oracle": "/private/pilot/private/example-misc-b/oracle.json"}
+  ],
+  "repeat_challenges": ["example-crypto-a", "example-forensics-a", "example-reverse-a"]
+}

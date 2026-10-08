@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TextIO
 
 from ctfbot import __version__
+from ctfbot.model_adapters.codex_app_server import find_codex_cli
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,17 +30,22 @@ def collect_diagnostics() -> list[Diagnostic]:
         Diagnostic(
             name='LLM provider',
             status='INFO',
-            detail='not configured in the project baseline',
+            detail='Codex App Server spike is available; dynamic tools remain experimental',
+        ),
+        Diagnostic(
+            name='Codex CLI',
+            status='OK' if find_codex_cli() else 'INFO',
+            detail=find_codex_cli() or 'not found on PATH; required for ChatGPT sign-in',
         ),
         Diagnostic(
             name='sandbox backend',
             status='INFO',
-            detail='not selected; planned for the Stage A runtime spike',
+            detail='synthetic Docker isolation smoke passed; challenge runtime is not admitted',
         ),
         Diagnostic(
             name='TUI framework',
             status='INFO',
-            detail='not selected; the current menu uses the Python standard library',
+            detail='Textual selected for the first TUI; spike only, not a runtime dependency',
         ),
     ]
 

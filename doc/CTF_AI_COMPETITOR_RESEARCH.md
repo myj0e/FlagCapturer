@@ -16,7 +16,7 @@
 
 没有一个项目可以不经评估就作为 ctfbot 的完整底座。优先评估建议：
 
-- 若要研究通用 CTF agent：先跑 EnIGMA 做基线，重点审查其 SWE-agent v0.7.0 兼容约束和改造成本。
+- 若要研究通用 CTF agent：静态参考 EnIGMA 的 ACI/IAT 和长输出处理；本项目阶段 A 已选择自有薄 runner，EnIGMA 的运行兼容和性能对照留作未来独立评估。
 - 若要快速交付团队用的 CTF 工作台：重点评估 NUSGreyhats/ctf-agent-workstation；它是目前与“管理题目并调用现有 agent 解题”最接近的公开参考，但其目标是云端工作站，且使用 GPL-3.0。
 - 若要做轻量本地 TUI：参考 AI-CTFer 的 `challenge.yml`、Docker、模型适配和每题输出目录，借鉴其单题流程；ctfbot 可在此基础上增加实时运行监看、证据浏览和交互会话。它适合作为流程样例，不能仅凭 README 当作成熟、全面的解题引擎。
 - 多 agent、历史 writeup RAG 和大量定制工具先不要作为首版前提，先用固定预算做单 agent 对照实验。
@@ -79,13 +79,13 @@
 
 | ctfbot 目标 | 优先研究的基础 | 选择理由 | 主要风险/退出条件 |
 |---|---|---|---|
-| 做可替换模型的通用 CTF agent/研究框架 | EnIGMA v0.7.0 做可运行基线；必要时用 SWE-ReX 拆执行运行时 | 最贴近 CTF ACI、IAT 和 benchmark 的问题，能较快建立性能基线。SWE-ReX 提供独立的 session 与执行 backend。 | 如果固定旧版妨碍新模型接入、工具 schema 或验证流程，就停止深度 fork，改做薄 runner 并复用接口思想。先看 license、依赖和镜像。 |
+| 做可替换模型的通用 CTF agent/研究框架 | 静态参考 EnIGMA v0.7.0 的 ACI/IAT；以自有薄 runner 为底座；必要时单独评估 SWE-ReX | 直接借鉴 CTF 会话、长输出和领域工作流，同时保持 provider、evidence、verifier 与授权契约可控。 | EnIGMA 旧版依赖 API 有冲突，阶段 A 不投入启动修复或性能对照；若未来需比较，需要固定版本、题目、模型预算和镜像。SWE-ReX 尚未验证。 |
 | 做团队/赛事用的 CTF Web 工作台 | NUSGreyhats/ctf-agent-workstation 作产品参考，优先评估其平台适配层 | 已覆盖多 agent、人工 steering、题目/运行持久化、竞赛平台、工具环境和 Web/Discord 交互。 | 整体更重并绑定 Claude/Codex；GPL-3.0 许可证需评估；云 VM、VPN、平台凭据和工具权限扩大运维与安全面。只抽取设计或代码前明确产品形态和许可证要求。 |
 | 做单人本地 TUI/课程练习工具 | AI-CTFer 作为 manifest、单题流程和运行产物参考；TUI 自建，solver adapter 可自建或替换 | `challenge.yml`、Docker、plan/notes/writeup 的单题流程简单，provider 配置清晰；ctfbot 可补上交互式运行监看和证据导航。 | 对多模型支持、session、领域覆盖、安全隔离和公开 benchmark 泛化先自行验证；不以当前 README 宣称代替试跑。 |
 | 做既有模型运行时的 CTF skills 包 | Claude Code workflow 的 skills-first 方式；或 NUS 的 skill catalog 设计 | 适合尽快积累工具说明和操作流程，不需要重建模型调用层。 | 依赖具体宿主，难实现模型/供应商公平对照；不适合以通用 agent 框架为主要目标的 ctfbot。 |
 | 研究多 agent 或经验库 | 参考 D-CIPHER、ctfagent、NUS 的并行协作，但先做单 agent baseline | 这些系统分别覆盖 planner/executor、领域专家、赛马和突破共享。 | 只有单 agent 固定预算对照显示净收益后才实现；检索答案型 writeup 与盲测基准必须隔离。 |
 
-**综合建议：** ctfbot 当前应先做一个 adapter-friendly 的解题 runner，而不是复制某个完整产品。对 EnIGMA 做兼容性 spike；对 NUS 工作台做功能差距检查；借鉴 AI-CTFer 的题目 manifest；借鉴 CTF Cyber Agent 的证据 schema；使用 SWE-ReX 或类似成熟组件处理会话/执行，再将解题工具做小而清楚的 CTF ACI。只有当目标明确为 Web 工作台、赛事集成和团队赛马时，才评估基于 NUS 项目大规模改造。
+**综合建议：** ctfbot 当前先做 adapter-friendly 的解题 runner，而不是复制某个完整产品。EnIGMA 用于静态参考 ACI/IAT；对 NUS 工作台做功能差距检查；借鉴 AI-CTFer 的题目 manifest 和 CTF Cyber Agent 的证据 schema；SWE-ReX 作为未来可选会话/执行组件评估。阶段 A 不要求运行 EnIGMA 或其他第三方 runner。只有当目标明确为 Web 工作台、赛事集成和团队赛马时，才评估基于 NUS 项目大规模改造。
 
 ## 5. ctfbot 可占据的差异化位置
 
@@ -107,7 +107,7 @@
 正式决定 fork 与自研前，可做一次小型、同条件 PoC：
 
 1. 固定 10–20 道开发题，覆盖至少 4 类；不把公开答案库检索内容注入 agent。
-2. 对照 EnIGMA 基线、轻量单 agent runner、（若环境允许）NUS 的单 agent 工作流；保持模型、题目、时间/token 预算和容器镜像一致。
+2. 阶段 A 先在 ctfbot 内建立可复现基线；未来确需竞品运行对照时，再比较 EnIGMA、轻量 runner 或（若环境允许）NUS 单 agent 工作流，并保持模型、题目、时间/token 预算和容器镜像一致。
 3. 记录每题精确 flag 校验、耗时、token/费用、工具调用数、重复动作、人工介入和复现情况，并按类别拆分。
 4. 做运行时适配成本记录：首次跑通耗时、需要改动的模块、依赖/镜像问题、模型适配难度、许可证和安全边界。
 5. 只有当多 agent 在相同预算下提升成功率或降低成本，才进入 planner/executor 或 race；只有当工具包装优于 shell baseline，才继续扩充定制工具目录。

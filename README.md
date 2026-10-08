@@ -6,9 +6,13 @@ FlagCapturer（命令名和 Python 包名为 `ctfbot`）旨在把 CTF 选手的�
 
 ## 项目状态
 
-当前版本 `0.1.0` 是工程基线，不是可自动解题的完整 agent。现在包含 Python 包结构、版本命令、环境诊断和最小终端菜单；LLM 调用、题目导入、沙箱执行、工具包和解题闭环尚未实现。
+当前版本 `0.1.0` 仍是开发基线，不是可自动解题的完整 agent。阶段 A 已增加 headless 单 agent loop、临时 ChatGPT/Codex adapter、离线 synthetic verifier/evidence 路径、Docker runtime adapter 和 pilot batch runner。10 道 CTFTiny 题目已正式准入为私有本地 pilot 并生成仓库外快照；题目数据没有上传到项目，正式快照仍未授权发送给模型。真实 CTF batch baseline 尚未运行。
 
-TUI 框架、模型 provider 和 sandbox/runtime 后端仍待阶段 A 评估。当前源码不依赖运行时第三方库，避免在可行性验证前绑定 UI 或 agent 框架。
+阶段 B 已实现最小 Textual 单题工作流：预览 importer 生成的私有 workspace、检查逐题模型传输授权、运行/停止 bounded 单 agent、查看 evidence 并生成基础报告。TUI 与 headless `solve` 共用 application service。合成测试覆盖了授权拒绝、候选验证、报告和取消；该阶段合成验收没有启动真实模型、Docker 或 CTF 附件；阶段 C2 的 Docker 实机补验见下文。Docker CLI 仍是候选 runtime，provider usage 和真实取消兼容性也未完整验收。阶段 A 记录和限制见[阶段 A 施工记录](doc/phase-a/README.md)，整体路线见[详细实施计划](doc/AI_CTF_AGENT_DETAILED_PLAN.md)。
+
+阶段 C1 已为每次 run 增加持久状态、失败/超时/停止/清理记录，以及未完成 run 的部分 evidence 报告；不会自动重试或恢复运行，操作建议是检查已有 evidence 后启动新 run。C2 已加入受限的 run-local 交互 session、PTY-backed Docker CLI 适配和私有 transcript，并通过合成 backend 验收；2026-10-07 已通过真实 Docker PTY 跨轮输入/输出、关闭、取消及缩短时限的空闲/总时限检查，全部容器确认删除；现有回归 74 项通过（含 9 项 TUI）。验收范围见[Docker session 实机记录](doc/phase-c/docker-session-acceptance.md)。C3 已实现单个本地 TCP 服务的配置、合成导入、候选 Docker adapter、健康检查和清理闭环；已用真实 Docker 合成服务通过双 run 网络隔离和 7 条生命周期验收，现有 74 项回归通过；第三增量已接入受审 profile、持久恢复记录和独立 Docker 请求进程，通过三类超时回执恢复及实际 solve 入口验收。本地已配置仅限该合成 fixture 的 profile，TUI/solve 按固定镜像、命令、端口和节点校验启用；逐题模型传输授权仍单独检查。见[C3 启用与恢复](doc/phase-c/service-activation.md)。C4 已加入候选受控 TCP 工具与独立 controller 授权/IP 固定，已接入持久 Docker 请求恢复、受审启用及管理命令；首个受控 TCP 闭环已通过 28 项必需合成验收及额外 HTTP 路径拒绝，临时受审 profile 的真实 CLI/TUI 通过；测试端点已停止，项目默认远端 profile 未安装。见 [C4 实机验收](doc/phase-c/remote-acceptance.md)。阶段 C 记录见[阶段 C 记录](doc/phase-c/README.md)。
+
+阶段 D 首轮基础实现已加入六类可发现工作流、环境检查、脚本与产物 lineage、v2 受控评测、离线命令审计/回放和四 namespace 受审记忆。可用 `ctfbot packs` 查看手册，`ctfbot fixtures` 创建自建六类题目，`ctfbot evaluate` 在明确预算与授权后运行评测。最新全量自动化测试 100 项通过；六类 Docker 基础闭环、25 个命令回放检查点、Reverse/Pwn PTY、随机 holdout 6/6 与通用记忆引用/撤销已验收。D 最终验收仍待多机制样本、工具扩展与真实受控评估。未调用真实模型或私有题目；默认不读取跨题记忆，未安装项目默认远端 profile。入口、限制与剩余门槛见 [阶段 D 记录](doc/phase-d/README.md)。
 
 ## 快速开始
 
@@ -25,7 +29,51 @@ ctfbot doctor
 ctfbot
 ```
 
-`ctfbot doctor` 显示基线环境状态；`ctfbot` 打开当前的导航菜单。暂时没有 CTF 解题命令。无交互终端时可运行 `python -m ctfbot doctor`。
+`ctfbot doctor` 显示基线环境状态；`ctfbot baseline-smoke` 运行不联网、不触碰题目数据的合成闭环。`ctfbot solve` 与 `ctfbot baseline` 只接受正式准入的本地 pilot；它们需要 digest 固定的工具镜像、逐题模型传输授权，并且必须显式传 `--confirm-model-usage` 才会使用模型额度。现有正式快照尚未获准传输，因此不能直接跑真实 pilot。
+
+### 使用最小 TUI
+
+先完成 Codex 模型配置（`ctfbot llm setup`），再运行 `ctfbot`。**Challenge file / folder 可直接填单个可执行文件/附件路径，或仅含一个附件的普通目录**，也接受 importer 生成的私有 workspace。单文件在 Preview 时复制到 `data/imports/` 的私有快照并记录哈希，原文件保持不变；勾选 **File model transfer** 表示允许将该文件及工具输出发送给配置的模型，随后 Preview → Run。许可用 `[ ] 未允许 / OFF` 和 `[x] 已允许 / ON` 区分，不依赖颜色。未勾选可预览但不可运行；该选项不修改已有 workspace 的授权。导入仅读取文件，不在宿主机执行；单文件大小限制为 1 字节至 32 MiB。
+
+路径输入框保留原始文件/目录，勾选许可不会改写路径；Preview 后在“题目预览”中查看实际运行使用的 Snapshot。三个输出区域分别为：**状态与操作提示**（成功、失败、阻断原因及下一步），**题目预览**（原始路径、快照、附件、授权、验证方式，可滚动），**运行记录 / Evidence**（运行时模型与工具事件、候选 flag；Evidence 按钮回看记录）。Report 生成独立报告文件，并在状态栏显示路径。
+
+运行记录按轮次分区：模型的公开说明单独标注；工具调用与返回合并为卡片，显示名称、参数摘要、状态、耗时和返回摘要；flag 候选、错误和完成状态有独立标记。顶部状态栏固定显示 Run 标识、轮次、工具调用计数与运行时长。普通生命周期、hash 和 artifact 路径不刷屏；长输出截断，完整 `events.jsonl` 与 artifacts 仍保存。不展示或推断隐藏推理。向上滚动会暂停自动跟随，出现“有新动态 · 返回最新”按钮；回到底部恢复跟随。Run 时自动折叠配置与预览，把记录框放大；Evidence 使用同一分组规则回看。按 **F2** 或 **Config / Log** 切换，Preview 会恢复配置。
+
+运行时记录区按约 75:25 分为左右两栏：右侧显示模型整理的目标、线索及证据编号、待验证假设、方案、下一步、阻塞点和更正。模型通过 `summary_update` 在取得重要结果或新公开说明后刷新完整摘要，不另发模型总结请求；每份摘要标注版本、轮次和时间，有新进展但尚未刷新时提示摘要可能过时。按 **F3** 隐藏或显示右栏；终端宽度小于 110 列时改为上下排列，两栏独立滚动。结束后保留摘要和最近候选，Evidence 回看恢复摘要更新记录；旧日志没有摘要时显示等待状态。摘要是模型报告，引用证据并不等于证明结论正确。
+
+长脚本可使用 `script_save → script_start → session_read`：后台执行不受普通命令的 120 秒限制，模型根据进度、运行时长与无输出时长决定继续等待或 `session_close`。仍受整次解题预算（默认最多 30 分钟）和输出上限约束。提示词要求定期输出进度并保存检查点；普通命令超时会尽量保留沙箱，必须关闭沙箱时立即终止本次解题。详见 [命令超时与长任务脚本](doc/phase-d/command-timeouts.md)。
+
+**未知 flag 时将 Oracle 留空**，补充提示词可填写线索、已知 flag 格式或解题偏好，也可留空。由模型结合证据识别候选并提交原文，不执行格式检查。无 oracle 的候选为 `unverified`，模型可继续检查；显式结束时结果为 `candidate_unverified`，候选需由你在比赛平台确认。证据不足时可明确以 `unsolved` 结束。若提供外置 private oracle，则进行已知答案精确验证，只有匹配才能为 `verified`。
+
+运行镜像自动填写，私有输出默认 `runs/stage-b`。点击 **Preview** 检查附件 hash、模型传输授权、验证方式和预算，然后 **Run**；未获题目授权或输入不符合准入策略时仍阻止启动。**Stop** 请求终止模型和 sandbox；完成后点击 **Flag** 打开候选窗口，选择答案并点击“复制 flag”；复制保留完整原文，通过终端 OSC 52 写入剪贴板（终端需允许此功能）。窗口可重复打开，**Evidence** 显示候选及状态，**Report** 生成 `report.md`，报告不复制原始候选。TUI 的“补充提示词（可选）”可填写解题线索和已知 flag 格式，留空即可运行。无 oracle 的 `solve` 支持省略 `--oracle`，通过 `--additional-prompt 'Flag 前缀为 SUCTF'` 提供提示。候选由 LLM 判断并提交，不执行格式检查；`candidate_unverified` 的退出码为 0 表示已结束并记录候选，不证明答案正确；`unsolved`、预算耗尽或错误退出为 1。旧版 `format_only` 日志保留原解释。严格 benchmark/evaluate 仍使用带 oracle 的数据集。
+
+TUI 启动后会在后台查找本机 **`ctfbot-tools:candidate`（general-v2）**，将其解析为不可变 `sha256` image ID 并自动填入 **Runtime (automatic)**。正常使用无需复制镜像 ID；该字段保留手动覆盖。镜像预装 Python 解题库、GDB/binutils、32/64 位 GCC/G++、常用归档/取证工具，以及 Node、Ruby、Perl、Java 环境；完整清单、构建和验收步骤见[通用工具镜像](doc/phase-d/tool-image.md)。未找到镜像或 Docker 不可用时显示准备提示；准备完成后再次 Preview 会重试查找。查找只执行本地 image inspect，不拉取镜像、不启动容器或模型。原最小 fixture 镜像保留供固定服务 profile 使用。
+
+TUI 可预览 C3 合成服务快照的 endpoint 和运行阻断原因；本地服务仅在受审 profile 匹配时可运行，远端题仅在 C4 完整验收记录、独立 grant 和受审 profile 匹配时可运行；本机尚未配置远端 profile。题目描述不能启用网络。模型传输授权由 workspace provenance 中该题的 `model_data_authorized` 和非空授权依据决定；再次运行也会重新检查 admission、路径、附件 hash、oracle 和 digest 固定的 image。不要把 oracle 文件放进 workspace 或 runs 目录。
+
+### 受审本地服务
+
+`ctfbot service status` 查看 profile 与待恢复记录；`ctfbot service approve --acceptance <私有验收目录>/acceptance.json --basis <审查依据>` 根据当前完整验收启用固定合成服务。Docker 请求超时或 controller 中断后使用 `ctfbot service recover`，结果未确认时禁止新服务 run。可在子命令前传 `--service-profile <私有配置路径>`，TUI 和 `solve` 共用该配置。完整操作见[C3 启用与恢复](doc/phase-c/service-activation.md)。
+
+### 受审远端 TCP
+
+`ctfbot remote status` 查看受审 profile 和待恢复状态，`ctfbot remote recover` 按所有权处理未完成的 solver 容器。取得并审阅匹配目标的完整 C4 验收后，使用 `ctfbot remote approve --acceptance <私有验收记录> --basis <审查依据>` 安装 profile。TUI/solve 共用 profile 和独立目标 grant；可在子命令前指定 `--remote-profile` 与 `--remote-grant`。短时自建端点已完成实机与临时受审启用验收，项目默认 profile 未安装。配置与范围见 [C4 实施记录](doc/phase-c/remote-targets.md)和 [实机结果](doc/phase-c/remote-acceptance.md)。
+
+## 临时配置 ChatGPT/Codex 模型
+
+需要本机安装 Codex CLI，并从仓库根目录运行：
+
+```sh
+ctfbot llm setup
+ctfbot llm status
+ctfbot llm test
+# 实验性工具调用 smoke；执行一次会发起一个真实模型请求
+ctfbot llm tool-smoke
+```
+
+`setup` 会通过 Codex App Server 发起 ChatGPT 浏览器登录（也可选设备码），读取当前账号可用模型，并把 provider、模型 ID 和 reasoning effort 保存到被 Git 忽略的 `data/llm.toml`。登录凭据继续由 Codex CLI 管理，ctfbot 不复制或保存 token。主菜单也可按 `l` 进入设置。
+
+`test` 会发送一条短模型请求；`tool-smoke` 会发起一个真实模型 turn 并提供固定返回值的工具，二者都可能占用账号额度，只有明确运行时才会调用模型。当前连接层不替 ctfbot 解题、不访问 CTF 题目附件。阶段 A 记录说明一次工具 smoke 已执行，不应为了重复验证而自动再运行。详细说明见[Codex App Server 临时接入说明](doc/phase-a/codex-app-server-integration.md)和[OpenAI Codex App Server 文档](https://developers.openai.com/codex/app-server)。
 
 ## 设计目标
 
@@ -56,7 +104,7 @@ src/ctfbot/
 doc/                  # 调研、设计计划和项目基线
 ```
 
-目前功能实现集中在 `ctfbot --version`、`ctfbot doctor` 和基础菜单；其余目录先确立模块边界，后续按计划逐步实现。
+当前代码覆盖单题 TUI/headless、生命周期、交互 session、固定本地服务、受控 TCP、六类基础工作流、评测、命令回放和受审记忆；各模式的实测范围见阶段记录。批量真实 baseline、多机制领域扩展及更广 provider/runtime 验收仍在后续路线中。
 
 ## 开发约定
 
@@ -71,8 +119,15 @@ doc/                  # 调研、设计计划和项目基线
 - [总体设计计划](doc/AI_CTF_AGENT_DESIGN_PLAN.md)
 - [竞品调研报告](doc/CTF_AI_COMPETITOR_RESEARCH.md)
 - [项目基线记录](doc/PROJECT_BASELINE.md)
+- [阶段 A 施工记录](doc/phase-a/README.md)
 - [变更记录](CHANGELOG.md)
 
 ## License
 
 本项目使用 [MIT License](LICENSE)。
+
+### Agent 通用可靠性增量
+
+候选记录、局部检查与结束已分开；新增来源绑定、原始证据聚焦读取、公开假设/实验记录和只读诊断。使用 `ctfbot diagnose-run --run-dir <运行目录>` 查看实际 prompt、工具返回覆盖范围和结束依据的私有引用。实施范围、兼容变化与验收见[通用可靠性实施记录](doc/phase-d/agent-common-improvement-implementation.md)。
+
+日常 TUI/solve 默认只统计工具调用次数，不设次数上限；时间、轮次和输出预算仍有效。显式 `--max-tool-calls` 与受控 `evaluate` 的整批额度可用于固定预算评测。长任务可用 `session_read collect_seconds` 合并观察，聚焦读取返回的 `source_ref` 可简化实验绑定。

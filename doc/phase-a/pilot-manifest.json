@@ -1,0 +1,2749 @@
+{
+  "schema_version": 1,
+  "created_date": "2026-09-30",
+  "source_repository": "https://github.com/NYU-LLM-CTF/CTFTiny",
+  "source_commit": "f1c9531672c45b24b7fb5f3aa44a7ac33d3602f8",
+  "source_root_license": "GPL-2.0 (as declared by upstream repository)",
+  "per_challenge_asset_license": "not independently evidenced by repository root license; user attested local evaluation authorization",
+  "storage_policy": {
+    "mode": "external_local_checkout",
+    "submodule": false,
+    "source_checkout": "/tmp/ctfbot-ctftiny-stage-a",
+    "challenge_assets_committed_to_ctfbot": false,
+    "redistribution": "not authorized"
+  },
+  "authorization": {
+    "basis": "User confirmed local private evaluation on 2026-09-29 and approved Docker-isolated execution of all existing challenge attachments on 2026-09-30",
+    "scope": "private local pilot only; no redistribution, project upload, remote challenge access, or LLM data transfer",
+    "docker_attachment_execution": true,
+    "llm_data_transfer": false,
+    "additional_smoke_requires_confirmation": true
+  },
+  "gold_oracle_policy": "provisionally accepted by user; reopen detailed oracle/verifier review if an actual evaluation fails",
+  "agent_input_policy": "No upstream file is copied to an agent workspace automatically. Only individually reviewed and hash-pinned challenge artifacts plus a curated prompt may be exposed. Never expose challenge.json, README files, test_solver, hints, solution/writeup files, or flag artifacts.",
+  "challenges": [
+    {
+      "id": "cry-babycrypto",
+      "category": "crypto",
+      "name": "babycrypto",
+      "source_path": "ctftiny/cry/babycrypto",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2018-Quals/tree/master/crypto/babycrypto",
+      "environment_kind": "static_file_reset_review_required",
+      "compose_declared": false,
+      "remote_box_declared": false,
+      "internal_port": null,
+      "declared_input_paths": [
+        "ctftiny/cry/babycrypto/ciphertext.txt"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "9a49549eea6176b7df3d0f2f69594a6c19c62bafa65e2132b4271e937691f607",
+      "review_status": "admitted_private_local_pilot",
+      "document_review_findings": [
+        {
+          "path": "README.md",
+          "finding": "document_contains_solution_or_flag_markers; exclude from agent input"
+        }
+      ],
+      "files": [
+        {
+          "path": "README.md",
+          "bytes": 289,
+          "sha256": "67b8eae94c34618ff9f689813d54378a2680041ee7f47e739ecc824cae055993",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 442,
+          "sha256": "9a49549eea6176b7df3d0f2f69594a6c19c62bafa65e2132b4271e937691f607",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "ciphertext.txt",
+          "bytes": 432,
+          "sha256": "bca6d18795f6f31ba3d88a89a8166025deb4954f51264b9346592a51ca2f96ac",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "decrypt_ciphertext.py",
+          "bytes": 245,
+          "sha256": "0af5999ff245ceb4290196f590470be656e76dd821de5fd15fe701d9990ac3b1",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "decrypt_ciphertext_3.py",
+          "bytes": 287,
+          "sha256": "ae24f107e66dca7c028fa09555c05955345a22422b51458fe29540a432ebcaf0",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "generate_ciphertext.py",
+          "bytes": 588,
+          "sha256": "537ebbf7062002f61e4dd49fa330475a1b724e7f44b912d8b820a800f5b53005",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "test_solver/ciphertext.txt",
+          "bytes": 432,
+          "sha256": "bca6d18795f6f31ba3d88a89a8166025deb4954f51264b9346592a51ca2f96ac",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_solver/solver.py",
+          "bytes": 287,
+          "sha256": "ae24f107e66dca7c028fa09555c05955345a22422b51458fe29540a432ebcaf0",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 229,
+          "sha256": "498290dfc8d74c09226ab99fd27a3534a6af06f4a22faa07c4eb5222f5060ce5",
+          "role": "oracle_or_solution_private"
+        }
+      ],
+      "proposed_pilot_mode": "static_files_only",
+      "admission_status": "admitted",
+      "answer_leak_review_status": "no_obvious_answer_leak",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 1,
+        "execution_smokes": 0,
+        "findings": [],
+        "execution_findings": []
+      },
+      "formal_admission_scope": "private local artifact pilot only; no model data transfer"
+    },
+    {
+      "id": "cry-collision-course",
+      "category": "crypto",
+      "name": "Collision Course",
+      "source_path": "ctftiny/cry/Collision-Course",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2021-Finals/tree/main/crypto/Collision-Course",
+      "environment_kind": "remote_endpoint_do_not_connect",
+      "compose_declared": false,
+      "remote_box_declared": true,
+      "internal_port": null,
+      "declared_input_paths": [
+        "ctftiny/cry/Collision-Course/handout.zip"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "5999a73208bf364f04c304006636fbaa1021207cdb99fb5bf6bcbd9b6312db0d",
+      "review_status": "not_admitted_runtime_and_license_review_pending",
+      "document_review_findings": [
+        {
+          "path": "readme.md",
+          "finding": "document_contains_solution_or_flag_markers; exclude from agent input"
+        }
+      ],
+      "files": [
+        {
+          "path": "calculate_numbers.py",
+          "bytes": 1251,
+          "sha256": "ba5e54fbcdf8cbdc22367de3890eebe218ee33895098db1f372f975a437e77d0",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 724,
+          "sha256": "5999a73208bf364f04c304006636fbaa1021207cdb99fb5bf6bcbd9b6312db0d",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "encrypt_database.py",
+          "bytes": 1656,
+          "sha256": "44fe473a3ca6648ef15c9dc8387645149acc8efed689cac832a47b90de177e26",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "encrypted_database.csv",
+          "bytes": 46313,
+          "sha256": "cbfa1e29ac550275500ec31b80f40427c58cc6aaac61f244864fbaf628a1028e",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "example_solution.py",
+          "bytes": 1409,
+          "sha256": "ad685761b48e34a646307d46ed517feb24f5064c7a9ff3c6a5cc99c73e9bd206",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "handout.zip",
+          "bytes": 22366,
+          "sha256": "5345044c29b8559cb0457b83b20c041caaca820a3efb95ed6878994f1eb84214",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "my_aes.py",
+          "bytes": 1879,
+          "sha256": "43cc60cb70ca7654f31ad8b2954bc1f195a502d8b9598b0fe226ec3054dde92b",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "password.bin",
+          "bytes": 55,
+          "sha256": "f11f579ca3e8f07b2712998028055f7e7cae7c2cf285c104aa705d7d966e3012",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "password.txt",
+          "bytes": 24,
+          "sha256": "c3088b35fc8c1f9778397101a4528d8b3b8861f549acd1faf809faf73f455693",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "readme.md",
+          "bytes": 4953,
+          "sha256": "4e50d256476b31c2db163b12b9974b2ae15b1a2e541a0a0806da03e11da30c75",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_md5_collisions.py",
+          "bytes": 968,
+          "sha256": "d2eb3c9a2b05cac3760a2df86f180d2dfe0c7fc44767ce97d7ebc028ec1c9a41",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "test_md5_speed.py",
+          "bytes": 468,
+          "sha256": "def61ae6d2fac3f51f8b66f771e5da1c14249f9395e8b7bc70f33b9a62c8fd2e",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 219,
+          "sha256": "65b5b236c86649fa4a73a2e76962981444f3374f7e1b81ff229a95f137e9155e",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "unencrypted_database.csv",
+          "bytes": 45705,
+          "sha256": "27ff8b36436f9269bf5ca0c482f776ba1cb18a8e3c7fbb7e0bc6412d35227a26",
+          "role": "not_available_to_agent_until_review"
+        }
+      ],
+      "proposed_pilot_mode": null,
+      "admission_status": "not_admitted",
+      "answer_leak_review_status": "no_obvious_answer_leak",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 1,
+        "execution_smokes": 0,
+        "findings": [],
+        "execution_findings": []
+      }
+    },
+    {
+      "id": "cry-ecxor",
+      "category": "crypto",
+      "name": "ECXOR",
+      "source_path": "ctftiny/cry/ECXOR",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2017-Finals/tree/master/Crypto/ECXOR",
+      "environment_kind": "static_file_reset_review_required",
+      "compose_declared": false,
+      "remote_box_declared": false,
+      "internal_port": null,
+      "declared_input_paths": [
+        "ctftiny/cry/ECXOR/ciphertext",
+        "ctftiny/cry/ECXOR/ecxor_handout_100.py",
+        "ctftiny/cry/ECXOR/rfc8032.py"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "cd6ca4ad5c237a1f0e615d95ed380226838ed79b19186f49e81aa101beb32c27",
+      "review_status": "admitted_private_local_pilot",
+      "document_review_findings": [],
+      "files": [
+        {
+          "path": "README.txt",
+          "bytes": 811,
+          "sha256": "da47f371376775ad65d80df52cb03745da76c519ef869032c7dcdeec2c78ff9c",
+          "role": "prompt_or_document_review_required"
+        },
+        {
+          "path": "__pycache__/rfc8032.cpython-312.pyc",
+          "bytes": 6243,
+          "sha256": "9fd219b97ea8d7bcb7562b26238545287c1c0fa5025a758e97564bad78404ed6",
+          "role": "exclude_generated"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 426,
+          "sha256": "cd6ca4ad5c237a1f0e615d95ed380226838ed79b19186f49e81aa101beb32c27",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "ciphertext",
+          "bytes": 11610,
+          "sha256": "d6eadab0f165f4617532a69b6b1da8c7a0ab2d33796c0492b9a900063afb0735",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "ecxor_handout_100.py",
+          "bytes": 1416,
+          "sha256": "bdc116f2d0344a63373a4a1b19c662a28781b3e952c05c2fd9e1e3ac667e7467",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "ecxor_handout_gen.py",
+          "bytes": 1423,
+          "sha256": "e6e51f1a9cbbee9fe8621b85ab462b59e18fb5fe675ff1178aaa32542aab42b5",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "ecxor_solver.py",
+          "bytes": 3631,
+          "sha256": "74ce8aa1b71d955c5fc76473b7144a96d2a0c6558d67b31e5ca6cadf5fa9cc8d",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "english_padding.txt",
+          "bytes": 1109,
+          "sha256": "3bdd6af03a30f85b2b7c890acac91fe171006e858cc27ac3e41ad9a32b7b8b65",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "plaintext",
+          "bytes": 273,
+          "sha256": "c592acc3b321a65558bf759556731e527f3dfaef1153558e4dab2f7132f64c21",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "rfc8032.py",
+          "bytes": 3722,
+          "sha256": "ab614b2c72479ab20b499327c059135e55b631bd748239124a55578dc948f42b",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "sherlock.ngrams",
+          "bytes": 20295,
+          "sha256": "6ebaf8ae9df56037bc67b95038639520f3676c39b70557a12a920ea17f8e5735",
+          "role": "not_available_to_agent_until_review"
+        }
+      ],
+      "proposed_pilot_mode": "static_files_only",
+      "admission_status": "admitted",
+      "answer_leak_review_status": "reviewed_non_oracle_flag_shapes",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 3,
+        "execution_smokes": 2,
+        "findings": [
+          {
+            "path": "ecxor_handout_100.py",
+            "oracle_forms_found": [],
+            "flag_shaped_strings": 2,
+            "normalized_oracle_match": false,
+            "archive_content_status": null,
+            "archive_has_solution_named_member": false,
+            "scan_status": {
+              "raw_input": "complete",
+              "strings": "complete",
+              "file_command": "complete"
+            }
+          }
+        ],
+        "execution_findings": [
+          {
+            "path": "ecxor_handout_100.py",
+            "kind": "python_smoke",
+            "oracle_forms_found": [],
+            "flag_shaped_strings": 1,
+            "normalized_oracle_match": false,
+            "exit_code": 1,
+            "timed_out": false,
+            "truncated": false
+          }
+        ]
+      },
+      "formal_admission_scope": "private local artifact pilot only; no model data transfer",
+      "admission_note": "Two generic flag-shaped strings were reported in the handout; exhaustive listed scans found no exact or normalized match to this challenge oracle. Retained as a documented non-oracle signal under the user-approved basic-confirmation threshold; re-open if a real evaluation indicates leakage."
+    },
+    {
+      "id": "cry-perfect-secrecy",
+      "category": "crypto",
+      "name": "Perfect Secrecy",
+      "source_path": "ctftiny/cry/perfect_secrecy",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2020-Quals/tree/master/crypto/perfect_secrecy",
+      "environment_kind": "remote_endpoint_do_not_connect",
+      "compose_declared": false,
+      "remote_box_declared": true,
+      "internal_port": null,
+      "declared_input_paths": [
+        "ctftiny/cry/perfect_secrecy/image1.png",
+        "ctftiny/cry/perfect_secrecy/image2.png"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "db2a2a183e1ed0e39f23710ddabd7fd65706955f10ef62566f6785f41b7cd92b",
+      "review_status": "admitted_private_local_pilot",
+      "document_review_findings": [],
+      "files": [
+        {
+          "path": "README.md",
+          "bytes": 217,
+          "sha256": "fb7cf892bbf6b8a8e8a509056f759f7220a7e2d065fa85cb97b0dbf6ff1271b4",
+          "role": "prompt_or_document_review_required"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 481,
+          "sha256": "db2a2a183e1ed0e39f23710ddabd7fd65706955f10ef62566f6785f41b7cd92b",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "flag.png",
+          "bytes": 8907,
+          "sha256": "21cf84697e93e198d257b4d74e6531b5cc5256c4e0b80ed1fe9ddedaf07a8168",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "flag.txt",
+          "bytes": 20,
+          "sha256": "a0d95c8562642afa2d2a8a355d04d051aad4d38033d7aa2358524ce85444535b",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "image1.png",
+          "bytes": 9631,
+          "sha256": "0a843262bc5011188722084a9035bd56b97e3e7ef62c603f9a210dd36234196d",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "image2.png",
+          "bytes": 9633,
+          "sha256": "77abdd21bcdc3b25fe4a5379c0a7302b0af081493780de0a52dced886e8f35fd",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "key.png",
+          "bytes": 23148,
+          "sha256": "648366652c4a9c9e97ce4b37e740942ba9ead8d71a8b60090305a9b756123c26",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "key_create.py",
+          "bytes": 244,
+          "sha256": "cabe4cd421af0f3fdbf005c76d6c4ac4ae6c56bd638858ed6d798bb3b48d31cb",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "one_time_pad.py",
+          "bytes": 297,
+          "sha256": "295dca0977460bca1a37a6f47b409ae5479182279b032dac64fba573cb57301e",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "other.png",
+          "bytes": 5516,
+          "sha256": "01b5d7d40d457f4408493caffb1e092e62be5cd9ea9732c978a7502d109d6342",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "solver.py",
+          "bytes": 558,
+          "sha256": "d67d9cd689cc21c9721dcbc6161f1823521c5e530eafeed4178416a15bc6aee3",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 219,
+          "sha256": "65b5b236c86649fa4a73a2e76962981444f3374f7e1b81ff229a95f137e9155e",
+          "role": "oracle_or_solution_private"
+        }
+      ],
+      "proposed_pilot_mode": "offline_artifact_only",
+      "admission_status": "admitted",
+      "answer_leak_review_status": "no_obvious_answer_leak",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 2,
+        "execution_smokes": 0,
+        "findings": [],
+        "execution_findings": []
+      },
+      "formal_admission_scope": "private local artifact pilot only; no model data transfer"
+    },
+    {
+      "id": "cry-super-curve",
+      "category": "crypto",
+      "name": "SuperCurve",
+      "source_path": "ctftiny/cry/super_curve",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2019-Quals/tree/master/crypto/super_curve",
+      "environment_kind": "compose_local_review_required",
+      "compose_declared": true,
+      "remote_box_declared": true,
+      "internal_port": 8000,
+      "declared_input_paths": [
+        "ctftiny/cry/super_curve/server.py",
+        "ctftiny/cry/super_curve/supercurve.py"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "d55aef3485815700c259a758f336ad9d5bd134eefe2c1c1faa163fcf28cb2a69",
+      "review_status": "not_admitted_runtime_and_license_review_pending",
+      "document_review_findings": [],
+      "files": [
+        {
+          "path": "Dockerfile",
+          "bytes": 308,
+          "sha256": "9b9bde83a23fc54ce72be67397c054d7514ba48ea5d1cf450396aa3feb76885f",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "README.md",
+          "bytes": 616,
+          "sha256": "a9a040a4a28ffa7c0db54ba7b5d83fb12f0880aaeb2427ecd10a4c3e11a678fe",
+          "role": "prompt_or_document_review_required"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 552,
+          "sha256": "d55aef3485815700c259a758f336ad9d5bd134eefe2c1c1faa163fcf28cb2a69",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "docker-compose.yml",
+          "bytes": 281,
+          "sha256": "db5eae8006294dec8889311d869e59fcda5bad8cd77930030516c0c223e12d0a",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "flag.txt",
+          "bytes": 22,
+          "sha256": "f89dd5ccd298e7810811b89d056f197637cda0f05e7e87881f07e3b55571de49",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "server.py",
+          "bytes": 878,
+          "sha256": "95c3f445ca7d34dfcbf9b94dddfe37d537235287005777b6131bb0f66bfc4f45",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "solve.py",
+          "bytes": 322,
+          "sha256": "7bbada83f389923a1ff93c5cf877ba807ebde6fb819f7b9c49fec5a1a3ab2fa9",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "supercurve.py",
+          "bytes": 2830,
+          "sha256": "477e25ee5640daa582ec0e2b9f6c732d1ff652e68f0097d23ec7b48be2e561cb",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 219,
+          "sha256": "65b5b236c86649fa4a73a2e76962981444f3374f7e1b81ff229a95f137e9155e",
+          "role": "oracle_or_solution_private"
+        }
+      ],
+      "proposed_pilot_mode": null,
+      "admission_status": "not_admitted",
+      "answer_leak_review_status": "no_obvious_answer_leak",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 2,
+        "execution_smokes": 2,
+        "findings": [],
+        "execution_findings": []
+      }
+    },
+    {
+      "id": "cry-the-lengths-we-extend-ourselves",
+      "category": "crypto",
+      "name": "The Lengths we Extend Ourselves",
+      "source_path": "ctftiny/cry/The Lengths we Extend Ourselves",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2022-Finals/tree/master/crypto/The%20Lengths%20we%20Extend%20Ourselves",
+      "environment_kind": "compose_local_review_required",
+      "compose_declared": true,
+      "remote_box_declared": true,
+      "internal_port": 5050,
+      "declared_input_paths": [
+        "ctftiny/cry/The Lengths we Extend Ourselves/message_maker.py",
+        "ctftiny/cry/The Lengths we Extend Ourselves/msg_log_26220.txt"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "7e46197ab03e9b73eb772d7fe1a2a9e20c0032155410832181e19b79e7986b06",
+      "review_status": "not_admitted_runtime_and_license_review_pending",
+      "document_review_findings": [
+        {
+          "path": "Readme.txt",
+          "finding": "document_contains_solution_or_flag_markers; exclude from agent input"
+        }
+      ],
+      "files": [
+        {
+          "path": "Dockerfile",
+          "bytes": 454,
+          "sha256": "f802ca5c77d1cfb9d16a6e7ad2725a13d817d449454f8bd7ece75203e0f5f00c",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "Readme.txt",
+          "bytes": 4888,
+          "sha256": "b5c0217dfd1569aa5e9c0fe0536e407cec21f4b761ef565a5938bbea65b56678",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 828,
+          "sha256": "7e46197ab03e9b73eb772d7fe1a2a9e20c0032155410832181e19b79e7986b06",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "docker-compose.yml",
+          "bytes": 318,
+          "sha256": "0e672b76476ab7a1f64b7ccd8ef565cb44546c568bb40877b8f1d86d0045e734",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "flag.txt",
+          "bytes": 60,
+          "sha256": "4ecf7294b5ee6c0988865c7bf36b1ac3107280a9814b1c95bcadc7c464267fc7",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "message_maker.py",
+          "bytes": 1200,
+          "sha256": "cfff244555459f1d8e9ca58adc8b10c30838d2fb840031be3b1219923abb4a56",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "msg_log_26220.txt",
+          "bytes": 929,
+          "sha256": "35a2ecf71bc74e39a78aea091a0df80963b2d3666ff8d6767301a3496f5f5b50",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "server.py",
+          "bytes": 627,
+          "sha256": "bdae7b2bd4da6451e3c4411fc7f52704f2f7a59cae89ff6d99204f69e4e85ac3",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "solver.py",
+          "bytes": 353,
+          "sha256": "1f145ab2946001049974096bde7a48859dcfcdae524fd097abd09536891031f5",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 414,
+          "sha256": "8dc8dc33a9bd842c0cbc786f64f6b0be39566bca6c7c82285fdcf695914a0b20",
+          "role": "oracle_or_solution_private"
+        }
+      ],
+      "proposed_pilot_mode": null,
+      "admission_status": "not_admitted",
+      "answer_leak_review_status": "no_obvious_answer_leak",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 2,
+        "execution_smokes": 1,
+        "findings": [],
+        "execution_findings": []
+      }
+    },
+    {
+      "id": "for-1black0white",
+      "category": "forensics",
+      "name": "1black0white",
+      "source_path": "ctftiny/for/1black0white",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2023-Quals/tree/main/forensics/1black0white",
+      "environment_kind": "static_file_reset_review_required",
+      "compose_declared": false,
+      "remote_box_declared": false,
+      "internal_port": null,
+      "declared_input_paths": [
+        "ctftiny/for/1black0white/qr_code.txt"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "3fe0279dcb101fb2376951a81b39670ac11c9a75267170eca8d49cf8c5b02f80",
+      "review_status": "admitted_private_local_pilot",
+      "document_review_findings": [
+        {
+          "path": "README.md",
+          "finding": "document_contains_solution_or_flag_markers; exclude from agent input"
+        }
+      ],
+      "files": [
+        {
+          "path": "README.md",
+          "bytes": 569,
+          "sha256": "2d47e1094b6cb563cac60304e891817dffd63a1a58366705ef7c1e82c8b3d77f",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 529,
+          "sha256": "3fe0279dcb101fb2376951a81b39670ac11c9a75267170eca8d49cf8c5b02f80",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "qr_code.txt",
+          "bytes": 283,
+          "sha256": "f208f499e2d842ec50911631ce7f7c73640594a2e2ef866e7f842eff0ac3996f",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "solve.py",
+          "bytes": 277,
+          "sha256": "bf6ecc876276ff6f0fb6ea4bf7f0ceb12c97d17a394d366ef18927aa05cfe9c9",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 219,
+          "sha256": "65b5b236c86649fa4a73a2e76962981444f3374f7e1b81ff229a95f137e9155e",
+          "role": "oracle_or_solution_private"
+        }
+      ],
+      "proposed_pilot_mode": "static_files_only",
+      "admission_status": "admitted",
+      "answer_leak_review_status": "no_obvious_answer_leak",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 1,
+        "execution_smokes": 0,
+        "findings": [],
+        "execution_findings": []
+      },
+      "formal_admission_scope": "private local artifact pilot only; no model data transfer"
+    },
+    {
+      "id": "for-whyos",
+      "category": "forensics",
+      "name": "whyOS",
+      "source_path": "ctftiny/for/whyOS",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2018-Quals/tree/master/forensics/whyOS",
+      "environment_kind": "static_file_reset_review_required",
+      "compose_declared": false,
+      "remote_box_declared": false,
+      "internal_port": null,
+      "declared_input_paths": [
+        "ctftiny/for/whyOS/com.yourcompany.whyos_4.2.0-28+debug_iphoneos-arm.deb",
+        "ctftiny/for/whyOS/console.log"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [
+        "console.log"
+      ],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "c0dafc308785b9379a7f2bc98cc5a6b6e31f0d72f84c6b5cb0fae219f87d0578",
+      "review_status": "not_admitted_runtime_and_license_review_pending",
+      "document_review_findings": [
+        {
+          "path": "console.log",
+          "finding": "declared input contains exact oracle value; exclude from agent input"
+        }
+      ],
+      "files": [
+        {
+          "path": "challenge.json",
+          "bytes": 411,
+          "sha256": "c0dafc308785b9379a7f2bc98cc5a6b6e31f0d72f84c6b5cb0fae219f87d0578",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "com.yourcompany.whyos_4.2.0-28+debug_iphoneos-arm.deb",
+          "bytes": 5188,
+          "sha256": "688720724e789482220ad95e2bbbcdb76a249c23888d75e9174c4da7fe646eea",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "console.log",
+          "bytes": 23695720,
+          "sha256": "6a8cac071c5a7390a286af5ce9e131e5ffc32d5433ed779be1be256a3e6bc477",
+          "role": "declared_input_contains_exact_oracle_private"
+        },
+        {
+          "path": "test_solver/console.log",
+          "bytes": 23695720,
+          "sha256": "6a8cac071c5a7390a286af5ce9e131e5ffc32d5433ed779be1be256a3e6bc477",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_solver/sploit.py",
+          "bytes": 262,
+          "sha256": "fb954118219f30d73c13f3d4d2f0349bb411b27aca256a4846f6c05c910be55e",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 266,
+          "sha256": "1d29e35a5012ecf7d93a9d3d6f76adfbb09eddd2e2b6a6a67e60cc69382a160c",
+          "role": "oracle_or_solution_private"
+        }
+      ],
+      "proposed_pilot_mode": null,
+      "admission_status": "not_admitted",
+      "answer_leak_review_status": "potential_answer_leak",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 2,
+        "execution_smokes": 0,
+        "findings": [
+          {
+            "path": "console.log",
+            "oracle_forms_found": [
+              "casefold",
+              "exact",
+              "url_encoded"
+            ],
+            "flag_shaped_strings": 0,
+            "normalized_oracle_match": true,
+            "archive_content_status": null,
+            "archive_has_solution_named_member": false,
+            "scan_status": {
+              "raw_input": "complete",
+              "strings": "truncated",
+              "file_command": "complete"
+            }
+          }
+        ],
+        "execution_findings": []
+      }
+    },
+    {
+      "id": "pwn-puffin",
+      "category": "pwn",
+      "name": "puffin",
+      "source_path": "ctftiny/pwn/puffin",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2023-Quals/tree/main/pwn/puffin",
+      "environment_kind": "compose_local_review_required",
+      "compose_declared": true,
+      "remote_box_declared": true,
+      "internal_port": 31140,
+      "declared_input_paths": [
+        "ctftiny/pwn/puffin/puffin",
+        "ctftiny/pwn/puffin/readme.txt"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "dbc85d1f91afa59628d7b1ba68898b644f39e4713d6f46ddb5ee315fbabd96c1",
+      "review_status": "not_admitted_runtime_and_license_review_pending",
+      "document_review_findings": [],
+      "files": [
+        {
+          "path": "Dockerfile",
+          "bytes": 444,
+          "sha256": "a1590a6cb5c5b19723339d3df383de6a2a203a2950d96cc1f6b21ab87803eb8e",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "Makefile",
+          "bytes": 62,
+          "sha256": "9c621aa10c6ce44bff6bb19dd8ddcc9ad64690c2c4b3922beeae01714769736e",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 433,
+          "sha256": "dbc85d1f91afa59628d7b1ba68898b644f39e4713d6f46ddb5ee315fbabd96c1",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "docker-compose.yml",
+          "bytes": 275,
+          "sha256": "0a31beba8224aec427ff7efb6c7b4b6a58e9694f7d614e5163620545941492d0",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "flag.txt",
+          "bytes": 65,
+          "sha256": "626e50878ac3a7fe26d8265d04eb4070618188eb23103e49a2373ffdb2e3f87e",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "puffin",
+          "bytes": 8608,
+          "sha256": "603474c8378854ddbd8665d7fa77223eaea3aede05a0c0cc178bec86f31cccf2",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "puffin.c",
+          "bytes": 461,
+          "sha256": "012c5a73494e940ebbd9c2a50de94c0873a22a6d1a0af22f1de65ee00c3d2b9c",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "readme.txt",
+          "bytes": 196,
+          "sha256": "481e5407fef95a88213258d0913ae8c4084f241cd18d75752fa4101000649216",
+          "role": "prompt_or_document_review_required"
+        },
+        {
+          "path": "solve.txt",
+          "bytes": 428,
+          "sha256": "c98cc3bbd8739b356cd82672fb3698fee52f34ec2612b17c4490de4942c2173c",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 219,
+          "sha256": "65b5b236c86649fa4a73a2e76962981444f3374f7e1b81ff229a95f137e9155e",
+          "role": "oracle_or_solution_private"
+        }
+      ],
+      "proposed_pilot_mode": null,
+      "admission_status": "not_admitted",
+      "answer_leak_review_status": "no_obvious_answer_leak",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 2,
+        "execution_smokes": 1,
+        "findings": [],
+        "execution_findings": []
+      }
+    },
+    {
+      "id": "pwn-bigboy",
+      "category": "pwn",
+      "name": "bigboi",
+      "source_path": "ctftiny/pwn/bigboy",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2018-Quals/tree/master/pwn/bigboy",
+      "environment_kind": "compose_local_review_required",
+      "compose_declared": true,
+      "remote_box_declared": true,
+      "internal_port": 1436,
+      "declared_input_paths": [
+        "ctftiny/pwn/bigboy/boi"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "d926b5924a508e44893b35d1dbe45675bcb37e9beac8cb5dea8eb5aa3a4f4428",
+      "review_status": "not_admitted_runtime_and_license_review_pending",
+      "document_review_findings": [
+        {
+          "path": "README.md",
+          "finding": "document_contains_solution_or_flag_markers; exclude from agent input"
+        }
+      ],
+      "files": [
+        {
+          "path": "Dockerfile",
+          "bytes": 634,
+          "sha256": "0c2bf2eaea9ebd1811c847c58abae2ae80d3c493b504f2310d0eef46fd80a882",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "Makefile",
+          "bytes": 25,
+          "sha256": "2d5bf271f5f11bb3a6aa7f99fc8eb0d5de4b327be1b9b2cafededcce4d2f4814",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "README.md",
+          "bytes": 377,
+          "sha256": "58b0fc0419c0b5ea0f8446969e1da12cf843b4105b4479ce41602e4b305bec94",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "art.txt",
+          "bytes": 268,
+          "sha256": "3aa16d3f30dc3b5beca005d11d9e6842772c5ac236bfedf47096071a224bee41",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "boi",
+          "bytes": 8792,
+          "sha256": "f279d95a5fb055e6203d2a8b22f8df9894d0170d92470bceddbfdec291d3581e",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "boi.c",
+          "bytes": 500,
+          "sha256": "7eb188174d492aec5dd3b2aba823f84ba313b887d7b6c8ef11da7ef8885bc605",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 378,
+          "sha256": "d926b5924a508e44893b35d1dbe45675bcb37e9beac8cb5dea8eb5aa3a4f4428",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "docker-compose.yml",
+          "bytes": 202,
+          "sha256": "853728a7eb22300503e9c0379e2b2fcfab85e364a0c9824fe89964f53e539f60",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "flag.txt",
+          "bytes": 40,
+          "sha256": "dad6912e97ac218f9f55cd30235ab57818565e5c32a64ee4142800853caa4473",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "run.sh",
+          "bytes": 35,
+          "sha256": "03790d0d8cb03a6aa42072cd122f7074228de3bbbf161191b6239f2232c7ad53",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "solver.py",
+          "bytes": 262,
+          "sha256": "f1d548dc41f3ef660f83044a7fa61a8558c4342fd461e5be9541e09901e3a28a",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_solver/solver.py",
+          "bytes": 317,
+          "sha256": "f4ef6e8e0b9b9304a4da038b51773145ec0ecf58fc469d754d33c0e110c47c00",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 229,
+          "sha256": "498290dfc8d74c09226ab99fd27a3534a6af06f4a22faa07c4eb5222f5060ce5",
+          "role": "oracle_or_solution_private"
+        }
+      ],
+      "proposed_pilot_mode": null,
+      "admission_status": "not_admitted",
+      "answer_leak_review_status": "no_obvious_answer_leak",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 1,
+        "execution_smokes": 1,
+        "findings": [],
+        "execution_findings": []
+      }
+    },
+    {
+      "id": "pwn-roppity",
+      "category": "pwn",
+      "name": "roppity",
+      "source_path": "ctftiny/pwn/roppity",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2020-Quals/tree/master/pwn/roppity",
+      "environment_kind": "compose_local_review_required",
+      "compose_declared": true,
+      "remote_box_declared": true,
+      "internal_port": 8000,
+      "declared_input_paths": [
+        "ctftiny/pwn/roppity/libc-2.27.so",
+        "ctftiny/pwn/roppity/rop"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "7b682457e527cf267cf47e5a3e4f78e7a9ae4f2fcd92841c4e6b7e976cdd6521",
+      "review_status": "not_admitted_runtime_and_license_review_pending",
+      "document_review_findings": [],
+      "files": [
+        {
+          "path": "Dockerfile",
+          "bytes": 402,
+          "sha256": "2a899edabeabe4e05365798c5e60c10ad03552c7c54d0f9277b06248f36c8039",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "Makefile",
+          "bytes": 71,
+          "sha256": "ce0401d92ad806f8bae37b3338dc342657b1491284aab20d68783f41cce24ebf",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 381,
+          "sha256": "7b682457e527cf267cf47e5a3e4f78e7a9ae4f2fcd92841c4e6b7e976cdd6521",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "docker-compose.yml",
+          "bytes": 225,
+          "sha256": "de2c143ff4e4068fba1a14b720d62998e38e9e0ac444987643c18a5f802e4c43",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "flag.txt",
+          "bytes": 30,
+          "sha256": "018960bdc95e10870ffced1907781b5f28b07adc93c0454b7a6563fa520294e2",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "libc-2.27.so",
+          "bytes": 2030544,
+          "sha256": "f0ad9639b2530741046e06c96270b25da2339b6c15a7ae46de8fb021b3c4f529",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "livesolve.py",
+          "bytes": 852,
+          "sha256": "20bdc151f4dc833e0f545633ebe78d16bbb6329bfb9d9068ce34fa6cc60586d5",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "rop",
+          "bytes": 8400,
+          "sha256": "07d7b5136e76841cadaed3557ffff3894614304607df35ba5d5fb0df6c4f2f01",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "rop.c",
+          "bytes": 156,
+          "sha256": "3106288468515708faa8b5d7ee205ccb1b4ddb85f45db61dc9de94a296f04d55",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "solve.py",
+          "bytes": 845,
+          "sha256": "5943cd4aee1f337d0924b30ea20de008adbd6aee456d0a651256a9b12ed663fe",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 219,
+          "sha256": "65b5b236c86649fa4a73a2e76962981444f3374f7e1b81ff229a95f137e9155e",
+          "role": "oracle_or_solution_private"
+        }
+      ],
+      "proposed_pilot_mode": null,
+      "admission_status": "not_admitted",
+      "answer_leak_review_status": "no_obvious_answer_leak",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 2,
+        "execution_smokes": 1,
+        "findings": [],
+        "execution_findings": []
+      }
+    },
+    {
+      "id": "rev-checker",
+      "category": "rev",
+      "name": "checker",
+      "source_path": "ctftiny/rev/checker",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2021-Quals/tree/main/rev/checker",
+      "environment_kind": "remote_endpoint_do_not_connect",
+      "compose_declared": false,
+      "remote_box_declared": true,
+      "internal_port": null,
+      "declared_input_paths": [
+        "ctftiny/rev/checker/checker.py"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "c097415e268b7cac0ef6bd97721ca6fb9b5b7251b3435227b7296e05ad67df8c",
+      "review_status": "not_admitted_runtime_and_license_review_pending",
+      "document_review_findings": [
+        {
+          "path": "README.md",
+          "finding": "document_contains_solution_or_flag_markers; exclude from agent input"
+        }
+      ],
+      "files": [
+        {
+          "path": "README.md",
+          "bytes": 826,
+          "sha256": "d8e8ed8bdb9d16a7399d73b814a3bd6acb74dd039ef2f9aa54875b222f20fc61",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 433,
+          "sha256": "c097415e268b7cac0ef6bd97721ca6fb9b5b7251b3435227b7296e05ad67df8c",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "checker.py",
+          "bytes": 775,
+          "sha256": "98bec881c8de88232671d9a93fca02a14207d0b4c168b24b90ae08cb4dbe91f2",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "checker_solver.py",
+          "bytes": 685,
+          "sha256": "edbd936f4cda70f42e79519af4817c1dae123bdb378bf1265c6f6b8eb9f46691",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "flag.txt",
+          "bytes": 23,
+          "sha256": "02f5079957b70dbd1194a2b7fdf0f906e9325e7cf8bbdf5b1fd8d4041efe4e78",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "hints/implementation.md",
+          "bytes": 634,
+          "sha256": "630542fc8de192cd7e0b21b877afb1327d312819dc1d62b8535c3393b4a37580",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "hints/solution.md",
+          "bytes": 198,
+          "sha256": "a6b054532dd86ce1a9465063a477f11e1bbacc4bcc0cd14b2ed4ae9aa90e0e70",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 219,
+          "sha256": "65b5b236c86649fa4a73a2e76962981444f3374f7e1b81ff229a95f137e9155e",
+          "role": "oracle_or_solution_private"
+        }
+      ],
+      "proposed_pilot_mode": null,
+      "admission_status": "not_admitted",
+      "answer_leak_review_status": "no_obvious_answer_leak",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 1,
+        "execution_smokes": 1,
+        "findings": [],
+        "execution_findings": []
+      }
+    },
+    {
+      "id": "rev-tablez",
+      "category": "rev",
+      "name": "tablez",
+      "source_path": "ctftiny/rev/tablez",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2017-Quals/tree/master/rev/tablez",
+      "environment_kind": "static_file_reset_review_required",
+      "compose_declared": false,
+      "remote_box_declared": false,
+      "internal_port": null,
+      "declared_input_paths": [
+        "ctftiny/rev/tablez/tablez"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "41f5944ba3fb11fdfa55b43743ba01628d813edc3905877a8c03f85ac784306b",
+      "review_status": "admitted_private_local_pilot",
+      "document_review_findings": [
+        {
+          "path": "README.md",
+          "finding": "document_contains_solution_or_flag_markers; exclude from agent input"
+        }
+      ],
+      "files": [
+        {
+          "path": "README.md",
+          "bytes": 172,
+          "sha256": "5f02a37bf44524da84d11de342ea0a640a1fe68959e446a4f889b34cb9e8511a",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "build.sh",
+          "bytes": 108,
+          "sha256": "6135887421b6a1858c23f003c71507e7e35a0371ee28f6275abcde94d799a199",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 229,
+          "sha256": "41f5944ba3fb11fdfa55b43743ba01628d813edc3905877a8c03f85ac784306b",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "flag-inc.h",
+          "bytes": 164,
+          "sha256": "1e6912526d406ecff4f56a0c727b3c089dd2283318d47dab16951e4d42609f12",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "gen_flagcmp.py",
+          "bytes": 487,
+          "sha256": "8c94354ea8f84e62279821fc8deda54a774bb9f570d8982209512dd2c067daa0",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "gen_table.py",
+          "bytes": 181,
+          "sha256": "4a76246489adabb16c0bf66d6a7979496ffa010573f684aa1da0481594f2ca0d",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "solve.py",
+          "bytes": 461,
+          "sha256": "98b6e7dbc2c1b677fcb43b4e4b50fad41c3edcd6b5eb797c93b9ac3bad37c74b",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "table-inc.h",
+          "bytes": 3354,
+          "sha256": "30c9d0a78e285c51914c3d1807df1a2145982c01514c0551b81faee449ab7233",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "tablez",
+          "bytes": 9736,
+          "sha256": "e8f5e0175ea29e28dbde04613ebd9d7b54b75ea47c2a57c15af0c9bae71b53a6",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "tablez.c",
+          "bytes": 863,
+          "sha256": "a67a050053b45e3417a02e62fa6f7bf66438e63df488f028182da51483d0cd7b",
+          "role": "not_available_to_agent_until_review"
+        }
+      ],
+      "proposed_pilot_mode": "static_files_only",
+      "admission_status": "admitted",
+      "answer_leak_review_status": "no_obvious_answer_leak",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 1,
+        "execution_smokes": 1,
+        "findings": [],
+        "execution_findings": []
+      },
+      "formal_admission_scope": "private local artifact pilot only; no model data transfer"
+    },
+    {
+      "id": "rev-baby-mult",
+      "category": "rev",
+      "name": "baby_mult",
+      "source_path": "ctftiny/rev/baby_mult",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2020-Quals/tree/master/rev/baby_mult",
+      "environment_kind": "remote_endpoint_do_not_connect",
+      "compose_declared": false,
+      "remote_box_declared": true,
+      "internal_port": null,
+      "declared_input_paths": [
+        "ctftiny/rev/baby_mult/program.txt"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "dc331121040e920ccb105a1fbc8dccae5d385b3fd223777573bae7ef1ed571b5",
+      "review_status": "admitted_private_local_pilot",
+      "document_review_findings": [],
+      "files": [
+        {
+          "path": "README.md",
+          "bytes": 323,
+          "sha256": "a825f5e586af03e49633e1ade78fd98e015aa8987b8df4bc10fe5f3b5bcf651c",
+          "role": "prompt_or_document_review_required"
+        },
+        {
+          "path": "assembly.dump",
+          "bytes": 2508,
+          "sha256": "b4c673934827e828d37697d1270c64997e7d7b616e4a9d76c2e80af6fa79d804",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "chal",
+          "bytes": 16328,
+          "sha256": "f3842c7d8da7ae8da588d75ae128324757ff686d9c8da43aff05f810968d668d",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "chal.c",
+          "bytes": 619,
+          "sha256": "7f96b201cb01f0433a4fdc92b71fac8e2b0d76739d425e7ea59555ecba8aa08b",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 375,
+          "sha256": "dc331121040e920ccb105a1fbc8dccae5d385b3fd223777573bae7ef1ed571b5",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "flag.txt",
+          "bytes": 26,
+          "sha256": "f06af123ce00517d1a3a432046017d662184f1c57659be360b325c5d998c82e0",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "hex_program.txt",
+          "bytes": 678,
+          "sha256": "bd107a234aa33b7d6b0ecda309757368bdb9d8a4ebe91a6b7511fe34e0f4207c",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "hints/implementation.md",
+          "bytes": 768,
+          "sha256": "3193182417ff4861f6b8e0848bcf268f0bcafc7fb125b8ba7ffe546276c7140a",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "hints/solution.md",
+          "bytes": 314,
+          "sha256": "83844b695a6faef171afb814c546c4900a6aafaf9cb3170bdea0bfacecb16eb4",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "program.txt",
+          "bytes": 952,
+          "sha256": "a84ce9d9c1ec55b0b6f44c2483e9b17081f7dc0f6959887feeaf8e42bd5da1ab",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "solver.py",
+          "bytes": 673,
+          "sha256": "9d32c2875bc177f4ca009cfe2280d50eb38cfac328b5f03b45e4a5f7cc7fb84e",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_solver/angr_solve.py",
+          "bytes": 710,
+          "sha256": "bfa41f599133bae04c9035fc24c78cfe0a497b6982894411cb76434087a5969c",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 233,
+          "sha256": "2991a9e63ded490dcf1e856b9c5f0c5d7642caf8d284df4d9f05f807e81f6e89",
+          "role": "oracle_or_solution_private"
+        }
+      ],
+      "proposed_pilot_mode": "offline_artifact_only",
+      "admission_status": "admitted",
+      "answer_leak_review_status": "no_obvious_answer_leak",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 1,
+        "execution_smokes": 0,
+        "findings": [],
+        "execution_findings": []
+      },
+      "formal_admission_scope": "private local artifact pilot only; no model data transfer"
+    },
+    {
+      "id": "rev-dockreleakage",
+      "category": "rev",
+      "name": "DockREleakage",
+      "source_path": "ctftiny/rev/dockREleakage",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2022-Quals/tree/master/rev/dockREleakage",
+      "environment_kind": "remote_endpoint_do_not_connect",
+      "compose_declared": false,
+      "remote_box_declared": true,
+      "internal_port": null,
+      "declared_input_paths": [
+        "ctftiny/rev/dockREleakage/dockREleakage.tar.gz"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "feab4fc423719baf9018e0856b63f66d6fe86664c2f7a6fce0b18cf3e847d996",
+      "review_status": "not_admitted_runtime_and_license_review_pending",
+      "document_review_findings": [],
+      "files": [
+        {
+          "path": "Dockerfile.ignore",
+          "bytes": 321,
+          "sha256": "5ac59f383cab883d8b77cc9f8f7b18ff6113e63fb3997d9aacf6e04b7a7bbe64",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "README.md",
+          "bytes": 194,
+          "sha256": "fba14e8d921eb30c84a367b63ba90e413155be60c50eb4605d558b9c649108a2",
+          "role": "prompt_or_document_review_required"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 842,
+          "sha256": "feab4fc423719baf9018e0856b63f66d6fe86664c2f7a6fce0b18cf3e847d996",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "dockREleakage.tar.gz",
+          "bytes": 5859840,
+          "sha256": "ee720db20c38b4862bc82223c30e8b95aae6881e05d571768cb5b08d2f586990",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "flag.txt",
+          "bytes": 73,
+          "sha256": "b9cd2ea09f1aa76e2a8473477bd3b3b5bc20214beb39ec1616825d8a25778d35",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "hints/implementation.md",
+          "bytes": 819,
+          "sha256": "53fbf41cdcca60d35a3aa33a1febbfe383368f0a7939df7750b5612652e4c3c9",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "hints/solution.md",
+          "bytes": 316,
+          "sha256": "98b504e9416edcd309d01ee45aad58bfdec34c8a4fa783a68d6494273745e74e",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "p-flag.txt",
+          "bytes": 29,
+          "sha256": "12bb5d17d55e38a223933d8a448821581ed62000ba88f6ba1a8ef59cbbf9cd89",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 981,
+          "sha256": "0b631c5be852b820b70b7ee6d0042c6889cdb7c4ce0d9e62842219939ca3bb14",
+          "role": "oracle_or_solution_private"
+        }
+      ],
+      "proposed_pilot_mode": null,
+      "admission_status": "not_admitted",
+      "answer_leak_review_status": "no_obvious_answer_leak",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 1,
+        "execution_smokes": 0,
+        "findings": [],
+        "execution_findings": []
+      }
+    },
+    {
+      "id": "rev-rap",
+      "category": "rev",
+      "name": "rap",
+      "source_path": "ctftiny/rev/rap",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2020-Finals/tree/master/rev/rap",
+      "environment_kind": "remote_endpoint_do_not_connect",
+      "compose_declared": false,
+      "remote_box_declared": true,
+      "internal_port": null,
+      "declared_input_paths": [
+        "ctftiny/rev/rap/rap"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "786a5b6d486233b350555f1be27d0df0da871fa4027ab0756b7f5c2315c066ad",
+      "review_status": "admitted_private_local_pilot",
+      "document_review_findings": [],
+      "files": [
+        {
+          "path": "README.md",
+          "bytes": 156,
+          "sha256": "2401c73f7828b49dd6cc2afe471aff6d041d8d8cbd74793847395225c6ae628d",
+          "role": "prompt_or_document_review_required"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 310,
+          "sha256": "786a5b6d486233b350555f1be27d0df0da871fa4027ab0756b7f5c2315c066ad",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "constrained_solve_haha_get_it_cuz_trapped_like_rapped_like_wrapped.py",
+          "bytes": 653,
+          "sha256": "661b716eebc33fe653d86cbcfeb0d7cb5b659012008077dfca76f1ad6e646c2a",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "flag",
+          "bytes": 44,
+          "sha256": "6a1d0427b3d4fcd624cb275cb6ee4dec97c59d70b82deaff33247ae3e2cece72",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "main.cpp",
+          "bytes": 701,
+          "sha256": "b142bfecc9eaec1d063f9a03e9ee84b024bb1fb5bc0fe72067d12afa67e2bdbb",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "main.s",
+          "bytes": 11049,
+          "sha256": "613517d8f813425a10f4c836bdd128bf6f9f96d6168d86b1dfc975e1dde4e261",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "rap",
+          "bytes": 10512,
+          "sha256": "a6a8215fed165eee8a621da4e520dd987f26e8a7d2b07056e47842c9315b73fa",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 219,
+          "sha256": "65b5b236c86649fa4a73a2e76962981444f3374f7e1b81ff229a95f137e9155e",
+          "role": "oracle_or_solution_private"
+        }
+      ],
+      "proposed_pilot_mode": "offline_artifact_only",
+      "admission_status": "admitted",
+      "answer_leak_review_status": "no_obvious_answer_leak",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 1,
+        "execution_smokes": 1,
+        "findings": [],
+        "execution_findings": []
+      },
+      "formal_admission_scope": "private local artifact pilot only; no model data transfer"
+    },
+    {
+      "id": "rev-whataxor",
+      "category": "rev",
+      "name": "whataxor",
+      "source_path": "ctftiny/rev/whataxor",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2023-Quals/tree/main/rev/whataxor",
+      "environment_kind": "static_file_reset_review_required",
+      "compose_declared": false,
+      "remote_box_declared": false,
+      "internal_port": null,
+      "declared_input_paths": [
+        "ctftiny/rev/whataxor/readme.txt",
+        "ctftiny/rev/whataxor/whataxor"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "01aa8f1a584e93f43a70f956bf227242b977ba8e864fc0d1d731da6fc3235b16",
+      "review_status": "not_admitted_runtime_and_license_review_pending",
+      "document_review_findings": [],
+      "files": [
+        {
+          "path": "Makefile",
+          "bytes": 55,
+          "sha256": "add0b9167d258e8fb0d988fb282cc050921cb3e2c46d29e0b3842669c59a82ce",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 619,
+          "sha256": "01aa8f1a584e93f43a70f956bf227242b977ba8e864fc0d1d731da6fc3235b16",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "hints/implementation.md",
+          "bytes": 261,
+          "sha256": "68f596eb920de782441e53d4d1eeab0b01004768a0603b910e3cf12099e4dfb5",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "hints/solution.md",
+          "bytes": 221,
+          "sha256": "6a2db16aaeaa7da62b33500e8e23a342558d41458e9ccdb2695450112417be3f",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "readme.txt",
+          "bytes": 792,
+          "sha256": "69d4b4936964b95a855dcdf7d753fb8fdcac1fb010a86278e0e5848ddb057159",
+          "role": "prompt_or_document_review_required"
+        },
+        {
+          "path": "solve.txt",
+          "bytes": 454,
+          "sha256": "db7eadf8d646df5ca14330921c5f1dffec8c79cd7527f2349a73877521fbd976",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 424,
+          "sha256": "e05c172ec2f11dd19e16b4a42f61fe4c98ae96200a72a7a3849201c388644a60",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "whataxor",
+          "bytes": 8528,
+          "sha256": "6bc9edc45f0121688b5024768d5591c20289dd70e391477d96477b6ecddefaf3",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "whataxor.c",
+          "bytes": 938,
+          "sha256": "37accdedebed0415167320e470b8cdc433cddd9205743475813a6c07e57b4b47",
+          "role": "not_available_to_agent_until_review"
+        }
+      ],
+      "proposed_pilot_mode": null,
+      "admission_status": "not_admitted",
+      "answer_leak_review_status": "no_obvious_answer_leak",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 2,
+        "execution_smokes": 1,
+        "findings": [],
+        "execution_findings": []
+      }
+    },
+    {
+      "id": "rev-maze",
+      "category": "rev",
+      "name": "maze",
+      "source_path": "ctftiny/rev/maze",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2021-Finals/tree/main/rev/maze",
+      "environment_kind": "compose_local_review_required",
+      "compose_declared": true,
+      "remote_box_declared": true,
+      "internal_port": "5000",
+      "declared_input_paths": [
+        "ctftiny/rev/maze/maze_public"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "1765bf9029a429d7fb3c89a0bd8f3e5e97e7267ba90036aad25c4340e649f5a3",
+      "review_status": "not_admitted_runtime_and_license_review_pending",
+      "document_review_findings": [],
+      "files": [
+        {
+          "path": ".gitignore",
+          "bytes": 5,
+          "sha256": "05b65b5a1dc3698e6c181821b09bd89bd66559938ac078beaf80dd766601b813",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "Dockerfile",
+          "bytes": 234,
+          "sha256": "e5c0670c1ac49c38b417fa506d38cbf315702728311ea2c938ae78d505b9884b",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "LICENSE",
+          "bytes": 11543,
+          "sha256": "5f1cf24e90d3a9e023a24b0c1b7fae7e7c596d42a0854cb2edb38e74223ca23a",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "Makefile",
+          "bytes": 253,
+          "sha256": "d4ccd9316edad33693320987df58590c437e92e02bdf542e9580504f4e6f214f",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "README.md",
+          "bytes": 1263,
+          "sha256": "aa9c0b73c852c50a38a84444f1408fdd60e07797ba1da15179f8931e978d0858",
+          "role": "prompt_or_document_review_required"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 554,
+          "sha256": "1765bf9029a429d7fb3c89a0bd8f3e5e97e7267ba90036aad25c4340e649f5a3",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "docker-compose.yml",
+          "bytes": 276,
+          "sha256": "73840800802462cfcd8d9369d683cf10dce770141a79361ed4118cab0fc1a1ae",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "flag.asm",
+          "bytes": 61,
+          "sha256": "924d69c2c57868013a07ac6f14b33d84a94f91fd8f42c00ef8fcc881fe27a199",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "generate_knight_map.py",
+          "bytes": 816,
+          "sha256": "62c80fb20166d48af4605fb57b2f5ede0ae078c714e4b8c2552d662b6ee67142",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "hints/implementation.md",
+          "bytes": 689,
+          "sha256": "86b1da5fdbbc8982547e0a6c6bfdefd5c544229de0548d12694cc672a8935b05",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "hints/solution.md",
+          "bytes": 227,
+          "sha256": "6e64c069bae5bb1fb8b6ba83d038cabd0d68b12c58440b489a829bda3a0bcbf6",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "map.asm",
+          "bytes": 1517,
+          "sha256": "9af8ae59d3ad47224ccd7a30e0d028464964a30c90d3a4157c1195d3b6cdeaac",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "maze",
+          "bytes": 30216,
+          "sha256": "343b60c9b2fdb90e299714bd8f073b827834acda17899fad4cdb6144fe98e70e",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "maze.asm",
+          "bytes": 3070,
+          "sha256": "2b3ed37c75af0e58bd4d28dd5876b4b00433bc5b9ec501ee68b54d85592d0246",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "maze_public",
+          "bytes": 30240,
+          "sha256": "9164bc9c66bf90154ff4a2d16e3c4678b3016a20109819e100ebd8289a9a9f4c",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "server.py",
+          "bytes": 619,
+          "sha256": "514f4fa8ba2cefa31a00ca9602402128ffe34ac7b03ee3b50392d4797b280c62",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "solve.py",
+          "bytes": 938,
+          "sha256": "4b072a65270a981870a31b57b971187f3a4118c5589de8c919a314bd68d8b052",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "success.asm",
+          "bytes": 84,
+          "sha256": "40ae32b131f9d320bdc7a727d11d3f46b0d7bf841648475ec7692611b29dbec9",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 219,
+          "sha256": "65b5b236c86649fa4a73a2e76962981444f3374f7e1b81ff229a95f137e9155e",
+          "role": "oracle_or_solution_private"
+        }
+      ],
+      "proposed_pilot_mode": null,
+      "admission_status": "not_admitted",
+      "answer_leak_review_status": "no_obvious_answer_leak",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 1,
+        "execution_smokes": 1,
+        "findings": [],
+        "execution_findings": []
+      }
+    },
+    {
+      "id": "web-poem-collection",
+      "category": "web",
+      "name": "poem-collection",
+      "source_path": "ctftiny/web/poem-collection",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2021-Quals/tree/main/web/poem-collection",
+      "environment_kind": "compose_local_review_required",
+      "compose_declared": true,
+      "remote_box_declared": true,
+      "internal_port": 80,
+      "declared_input_paths": [],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "16aeee33817ec1031b5b8b03193a1bbf00a40b3203cd193ec899f15a05314226",
+      "review_status": "not_admitted_runtime_and_license_review_pending",
+      "document_review_findings": [
+        {
+          "path": "README.md",
+          "finding": "document_contains_solution_or_flag_markers; exclude from agent input"
+        }
+      ],
+      "files": [
+        {
+          "path": "Dockerfile",
+          "bytes": 136,
+          "sha256": "0ecede8a38d3a7a7184dc0f70c1853d60155902020914e8ed975a8771f170069",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "README.md",
+          "bytes": 1245,
+          "sha256": "fda494121ce9cdb9e27d211d2bd1308f55956705284e33b017237dd4dd76eefc",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "apache2.conf",
+          "bytes": 7285,
+          "sha256": "57c3bf96accd9173206adc7248d444bfd2d4e9c35cd7849de386445e5a47a7ce",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 529,
+          "sha256": "16aeee33817ec1031b5b8b03193a1bbf00a40b3203cd193ec899f15a05314226",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "docker-compose.yml",
+          "bytes": 253,
+          "sha256": "4abc4a0d7c4211a11193f0c20d7095f0feb601953e4dd7a72719a6c3104100ae",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "solve.sh",
+          "bytes": 78,
+          "sha256": "45a33ec017a408b583223638d087a2ab6b8e4de370e8b790a2e12b767d949850",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "src/.htaccess",
+          "bytes": 57,
+          "sha256": "1fe682eaea715177b1f5d2837b7b564649db8f8f02642cd465df014378352498",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "src/flag.txt",
+          "bytes": 38,
+          "sha256": "959b2ccf40de0e4f05b17fedd4cbe80c87fb888df2a920b388434dbfe9eeaa45",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "src/index.php",
+          "bytes": 340,
+          "sha256": "09db161ae58b5468967d380f453be4089c471690543b809d85b88fcb7879064b",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "src/poems/index.php",
+          "bytes": 646,
+          "sha256": "2dedd65ddc91504ffd774488146f72efce71faec7d53c550f9f2bb1b06c86b0c",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "src/poems/poem1.txt",
+          "bytes": 889,
+          "sha256": "157b611b9a769a5fc59dd60d6f0d5e50200b7dcfb9b006af63c37279057e018f",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "src/poems/poem2.txt",
+          "bytes": 292,
+          "sha256": "7154bacc31d87c268eb9a088122f3f27940735db0423b61a46b72df448adac5c",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "src/poems/poem3.txt",
+          "bytes": 474,
+          "sha256": "29cfed9ab7c1a49a1bf02a561f8d5e5501e1c023e73211abc803866942f74fac",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 219,
+          "sha256": "65b5b236c86649fa4a73a2e76962981444f3374f7e1b81ff229a95f137e9155e",
+          "role": "oracle_or_solution_private"
+        }
+      ],
+      "proposed_pilot_mode": null,
+      "admission_status": "not_admitted",
+      "answer_leak_review_status": "no_declared_input",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 0,
+        "execution_smokes": 0,
+        "findings": [],
+        "execution_findings": []
+      }
+    },
+    {
+      "id": "web-smug-dino",
+      "category": "web",
+      "name": "Smug-Dino",
+      "source_path": "ctftiny/web/smug-dino",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2023-Quals/tree/main/web/smug-dino",
+      "environment_kind": "compose_local_review_required",
+      "compose_declared": true,
+      "remote_box_declared": true,
+      "internal_port": 3009,
+      "declared_input_paths": [],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "afac1e0952a9951c2c189ff3c7c27dc45c5200d2196637fd0e63babc80331057",
+      "review_status": "not_admitted_runtime_and_license_review_pending",
+      "document_review_findings": [
+        {
+          "path": "README.md",
+          "finding": "document_contains_solution_or_flag_markers; exclude from agent input"
+        }
+      ],
+      "files": [
+        {
+          "path": "Dockerfile",
+          "bytes": 706,
+          "sha256": "2a1c4382b8d13eb9b11b6082078d37bb5d56debcf70984506582ee1a396c43e2",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "README.md",
+          "bytes": 3248,
+          "sha256": "9bc8d78680256c6838c7f90eae3f3f9e4e38cae822b0feea64cb52374f8e7114",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 506,
+          "sha256": "afac1e0952a9951c2c189ff3c7c27dc45c5200d2196637fd0e63babc80331057",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "custom_nginx_conf/fastcgi.conf",
+          "bytes": 1077,
+          "sha256": "b2c3d480a58f61f3a7dc61850b461e892e36f236317765a4f2f6d558c928fa57",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "custom_nginx_conf/fastcgi.conf.default",
+          "bytes": 1077,
+          "sha256": "b2c3d480a58f61f3a7dc61850b461e892e36f236317765a4f2f6d558c928fa57",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "custom_nginx_conf/fastcgi_params",
+          "bytes": 1007,
+          "sha256": "f37852d0113de30fa6bfc3d9b180ef99383c06739530dd482a8538503afd5a58",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "custom_nginx_conf/fastcgi_params.default",
+          "bytes": 1007,
+          "sha256": "f37852d0113de30fa6bfc3d9b180ef99383c06739530dd482a8538503afd5a58",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "custom_nginx_conf/koi-utf",
+          "bytes": 2837,
+          "sha256": "b5f8a6d411db5e5d11d151d50cd1e962444732593adec0e1ef0a8c6eebec63ee",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "custom_nginx_conf/koi-win",
+          "bytes": 2223,
+          "sha256": "de518a9eafe86c8bc705e296d0ef26135835b46bdc0de01d1d50a630fa5d341e",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "custom_nginx_conf/mime.types",
+          "bytes": 5231,
+          "sha256": "7f0b9e0c2320db6882b6d0db1cb3d28c41dd4ff0d1c6e17798ff19668f412598",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "custom_nginx_conf/mime.types.default",
+          "bytes": 5231,
+          "sha256": "7f0b9e0c2320db6882b6d0db1cb3d28c41dd4ff0d1c6e17798ff19668f412598",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "custom_nginx_conf/myhiddenserver.conf",
+          "bytes": 134,
+          "sha256": "5bbb6dbf46a59a3c8e526f185f34f4eb6d0c52b72549e072320d94ea1adca9a3",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "custom_nginx_conf/myserver.conf",
+          "bytes": 399,
+          "sha256": "f9fa6039d5b02450f2fe1adf526f9ab87fdd046569f496b11a92496d40e9ba69",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "custom_nginx_conf/nginx.conf",
+          "bytes": 2745,
+          "sha256": "1b8b798de4f1d87ace06f4cea493005e30fcda59640532c3b7e20422aa9ac539",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "custom_nginx_conf/nginx.conf.default",
+          "bytes": 2883,
+          "sha256": "9e67d0465d36bb8b6fda770f6bd6722a3e18134c8987298f608648eda79c0777",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "custom_nginx_conf/scgi_params",
+          "bytes": 636,
+          "sha256": "f27b2027c571ccafcfb0fbb3f54d7aeee11a984e3a0f5a1fdf14629030fc9011",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "custom_nginx_conf/scgi_params.default",
+          "bytes": 636,
+          "sha256": "f27b2027c571ccafcfb0fbb3f54d7aeee11a984e3a0f5a1fdf14629030fc9011",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "custom_nginx_conf/uwsgi_params",
+          "bytes": 664,
+          "sha256": "015cb581c2eb84b1a1ac9b575521d5881f791f632bfa62f34b26ba97d70c0d4f",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "custom_nginx_conf/uwsgi_params.default",
+          "bytes": 664,
+          "sha256": "015cb581c2eb84b1a1ac9b575521d5881f791f632bfa62f34b26ba97d70c0d4f",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "custom_nginx_conf/win-utf",
+          "bytes": 3610,
+          "sha256": "55adf050bad0cb60cbfe18649f8f17cd405fece0cc65eb78dac72c74c9dad944",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "dino_smuggling/app.js",
+          "bytes": 2784,
+          "sha256": "dcd6f5218f68aef339775c2475ea7d7a3b80078e4cd726fa44c8878aaf4132b2",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "dino_smuggling/package.json",
+          "bytes": 466,
+          "sha256": "5997e744f63615d100cb25449b24c16401ac763f8640d023ba87d5c57a5efc08",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "dino_smuggling/views/css/styles.css",
+          "bytes": 664,
+          "sha256": "7a1974cac4ae66b796fe4069f18a5dd4a164bb2be5bda53229f341131e327961",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "dino_smuggling/views/hint.ejs",
+          "bytes": 272,
+          "sha256": "e05353959b376ca11f87912b45e9f01494b97a95090408d2d3a12a135e8965b6",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "dino_smuggling/views/index.ejs",
+          "bytes": 1952,
+          "sha256": "6f0eb6c21ad9cda14c42d75eb499ecc60c975bd71b31a1aa03d28bae616b98d1",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "dino_smuggling/views/succeed_hint.ejs",
+          "bytes": 340,
+          "sha256": "aa6469a70bbab9ab2fc5f0db219fdccfd536ed93217969c1932777c7c62607d7",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "docker-compose.yml",
+          "bytes": 177,
+          "sha256": "a56fb71b150ace61e903101883036c9e7bf157e755c3a986008778a5123ec389",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 219,
+          "sha256": "65b5b236c86649fa4a73a2e76962981444f3374f7e1b81ff229a95f137e9155e",
+          "role": "oracle_or_solution_private"
+        }
+      ],
+      "proposed_pilot_mode": null,
+      "admission_status": "not_admitted",
+      "answer_leak_review_status": "no_declared_input",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 0,
+        "execution_smokes": 0,
+        "findings": [],
+        "execution_findings": []
+      }
+    },
+    {
+      "id": "web-shreeramquest",
+      "category": "web",
+      "name": "ShreeRamQuest",
+      "source_path": "ctftiny/web/ShreeRamQuest",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2023-Finals/tree/main/web/ShreeRamQuest",
+      "environment_kind": "compose_local_review_required",
+      "compose_declared": true,
+      "remote_box_declared": true,
+      "internal_port": 80,
+      "declared_input_paths": [],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "c7151d5a4076a1878809ee1faad09d2999e6a31686fde423d92eaaae160fbe13",
+      "review_status": "not_admitted_runtime_and_license_review_pending",
+      "document_review_findings": [],
+      "files": [
+        {
+          "path": ".dockerignore",
+          "bytes": 29,
+          "sha256": "3c7d607fe7a8eccce5f03108080deccd4286f3d23abd030e490b274bb4e75a7d",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "Dockerfile",
+          "bytes": 475,
+          "sha256": "172fc5480f9638a21739bf18a04cf00450bcea74ea02b240d68ddb93c474ab70",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "README.md",
+          "bytes": 88,
+          "sha256": "f889f7af0e1a44fc216faea3aa73a2c3d38036fbd3d206361ba4cdfb971724c3",
+          "role": "prompt_or_document_review_required"
+        },
+        {
+          "path": "app.js",
+          "bytes": 4280,
+          "sha256": "837aec8f0183c7102a8c9f20db3af055d15652badf26169a53acfe840f14e7ca",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 544,
+          "sha256": "c7151d5a4076a1878809ee1faad09d2999e6a31686fde423d92eaaae160fbe13",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "docker-compose.yml",
+          "bytes": 1150,
+          "sha256": "fe3fa8ba419b3d8862f2d610efa059ed51e8e6564931f7243798cacdb218deb4",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "nginx/Dockerfile",
+          "bytes": 125,
+          "sha256": "146d9144c73e194042d7a0448c3276b08019b526c5e5aeebb6e54ec940d0d7a8",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "nginx/nginx.conf",
+          "bytes": 577,
+          "sha256": "7bf9f5b7dd09cf86364d9864620c0906bac5fda29a438e6ec5af7f9663bfd979",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "nginx/nginx.conf.bk",
+          "bytes": 1918,
+          "sha256": "1b8ee6198f5c8a13ec9c58b199ca941aa39291d0d01ba9b9aaf32dcd50c68de9",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "package.json",
+          "bytes": 277,
+          "sha256": "fc31d7ae62d15b4980dbbd8738f7bdc8c8faff9df327db6aa9b4810fa15c487e",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "test_solver/solve.py",
+          "bytes": 1938,
+          "sha256": "18662951739c02692078fe360f0d96d9c4521698825cb189ec41e36640800efb",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 82,
+          "sha256": "429e04bbd41297067df44db63decbf12003d74eb0dff6de5f41e91f9b6666524",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "writeup.md",
+          "bytes": 1253,
+          "sha256": "529bbe6c2bb5b5dde9564d522bb8549d2ab543ad2f4f2df463737ed6124999ff",
+          "role": "oracle_or_solution_private"
+        }
+      ],
+      "proposed_pilot_mode": null,
+      "admission_status": "not_admitted",
+      "answer_leak_review_status": "no_declared_input",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 0,
+        "execution_smokes": 0,
+        "findings": [],
+        "execution_findings": []
+      }
+    },
+    {
+      "id": "msc-weak-password",
+      "category": "misc",
+      "name": "Weak Password",
+      "source_path": "ctftiny/msc/Weak-Password",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2021-Quals/tree/main/misc/Weak-Password",
+      "environment_kind": "remote_endpoint_do_not_connect",
+      "compose_declared": false,
+      "remote_box_declared": true,
+      "internal_port": null,
+      "declared_input_paths": [],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "0244ad1e46bb09c6462e97dc6603826d8f3a0dbde4783d37ad9b1a9458908be8",
+      "review_status": "not_admitted_runtime_and_license_review_pending",
+      "document_review_findings": [],
+      "files": [
+        {
+          "path": "README.md",
+          "bytes": 381,
+          "sha256": "b6bf6752e2d75b80f738d6c6ee3b7c10123bd4545dc59e3efed61285be3031ff",
+          "role": "prompt_or_document_review_required"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 790,
+          "sha256": "0244ad1e46bb09c6462e97dc6603826d8f3a0dbde4783d37ad9b1a9458908be8",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 219,
+          "sha256": "65b5b236c86649fa4a73a2e76962981444f3374f7e1b81ff229a95f137e9155e",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "testing_moat.txt",
+          "bytes": 349,
+          "sha256": "756d70349059eaa5d2cc7743c9e722fa353ef6ee32701639273b099a10a11ed6",
+          "role": "not_available_to_agent_until_review"
+        }
+      ],
+      "proposed_pilot_mode": null,
+      "admission_status": "not_admitted",
+      "answer_leak_review_status": "no_declared_input",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 0,
+        "execution_smokes": 0,
+        "findings": [],
+        "execution_findings": []
+      }
+    },
+    {
+      "id": "msc-ezmaze",
+      "category": "misc",
+      "name": "ezMaze",
+      "source_path": "ctftiny/msc/ezMaze",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2022-Quals/tree/master/misc/ezMaze",
+      "environment_kind": "remote_endpoint_do_not_connect",
+      "compose_declared": false,
+      "remote_box_declared": true,
+      "internal_port": null,
+      "declared_input_paths": [
+        "ctftiny/msc/ezMaze/attachment/maze.pt"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "8fee518e12bf2859ba3e183e51ffbfba941dc9637df1dd0108f2f403af0ca1c9",
+      "review_status": "admitted_private_local_pilot",
+      "document_review_findings": [],
+      "files": [
+        {
+          "path": "Readme.md",
+          "bytes": 410,
+          "sha256": "28e4bd2e1c320f9ade8d652bdbb400690f73e30a5075beae358c022ca2a2aa89",
+          "role": "prompt_or_document_review_required"
+        },
+        {
+          "path": "Solution/ezMaze write up .pdf",
+          "bytes": 25369,
+          "sha256": "a1a4963363227707b0d5cb53b0dfc369fda6b513988c5def639ee380e32607d3",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "attachment/maze.pt",
+          "bytes": 10447,
+          "sha256": "3c24c5d940a16d81defdc958aa431aafeb50476f6fa9696fd8bd2ee4c51bcb93",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 639,
+          "sha256": "8fee518e12bf2859ba3e183e51ffbfba941dc9637df1dd0108f2f403af0ca1c9",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "description/challenge.txt",
+          "bytes": 186,
+          "sha256": "10ab32c69dca9d3e754a5732ca07d5a0af349d35f353be1e2ff148abf814247a",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "flag/flag.txt",
+          "bytes": 38,
+          "sha256": "44cb621c624bc818a04f0817a7eef1e9830c2af70d6a6b281fd87a672c9f87ed",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_solver/solution.py",
+          "bytes": 1236,
+          "sha256": "167dd2cf24d644bb7ad8fdcf78f88dabe6839216907bc263e493b44650461426",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 298,
+          "sha256": "da36fed8f40f2e5b03a2dbdc7f7605be7849fe2270aac673f780fb7434181749",
+          "role": "oracle_or_solution_private"
+        }
+      ],
+      "proposed_pilot_mode": "offline_artifact_only",
+      "admission_status": "admitted",
+      "answer_leak_review_status": "no_obvious_answer_leak",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 1,
+        "execution_smokes": 0,
+        "findings": [],
+        "execution_findings": []
+      },
+      "formal_admission_scope": "private local artifact pilot only; no model data transfer"
+    },
+    {
+      "id": "msc-showdown",
+      "category": "misc",
+      "name": "Showdown",
+      "source_path": "ctftiny/msc/showdown",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2018-Finals/tree/master/misc/showdown",
+      "environment_kind": "compose_local_review_required",
+      "compose_declared": true,
+      "remote_box_declared": true,
+      "internal_port": 9222,
+      "declared_input_paths": [
+        "ctftiny/msc/showdown/showdown.tar.gz"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "2150ca395f02fe675d76a13c5baf4ce2d18c96a778dd1e1b80900680feda0680",
+      "review_status": "not_admitted_runtime_and_license_review_pending",
+      "document_review_findings": [],
+      "files": [
+        {
+          "path": "challenge.json",
+          "bytes": 589,
+          "sha256": "2150ca395f02fe675d76a13c5baf4ce2d18c96a778dd1e1b80900680feda0680",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "docker-compose.yml",
+          "bytes": 286,
+          "sha256": "5ea330b88bb7b2681c6f4a5b644a73694e03bdc8954b212e9779579b217bf7d7",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "showdown.tar.gz",
+          "bytes": 2210,
+          "sha256": "44dddacd6690cb8d8f04f3d443d4d4eb908d99fc541c73b8471ac662b86666e9",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "showdown_container/Dockerfile",
+          "bytes": 471,
+          "sha256": "3d23c599cca3c094e0479188c1bd6209637f857ab6d5ef544701cfee15d4d8d3",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "showdown_container/bandit.sh",
+          "bytes": 2672,
+          "sha256": "d65366920736381db14c398340882b61fee077e80c91b3f3b9a167e8bba2d83a",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "showdown_container/build.sh",
+          "bytes": 93,
+          "sha256": "d81f40a59285603e8bbc7b2b130f99558817d84110bf0a7c43b721e5d15207b2",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "showdown_container/connect.sh",
+          "bytes": 86,
+          "sha256": "8d2e6a143ac7e120c6ad54f000ae87dd29c00747d95ad099dfddc4f25084936c",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "showdown_container/flag",
+          "bytes": 64,
+          "sha256": "d3e7b4ef776c6e57b0d3cc8e567a4dbec57da73cb81f3b881da3e20cd7d53ee3",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "showdown_container/serve.sh",
+          "bytes": 101,
+          "sha256": "6ee8c7696a982c8da5709dbf8200a71e5604eb8bb91f6154615d62aaaec8e06e",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "showdown_container/showdown",
+          "bytes": 266,
+          "sha256": "c3f5076c4922876a044da4a8b9eb7854b909e077c171669ad4ca6b72f9f0d053",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "showdown_container/sudoers",
+          "bytes": 764,
+          "sha256": "fb9692288b73032d6f58f33ab39b24ea1433b4d6427fb5be7bec0389ee15d7e0",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "showdown_server/Dockerfile",
+          "bytes": 485,
+          "sha256": "d5b0ea55c4120407ac4da885c724157f3dcb94c1ff425d2db47f638c8fc7d93f",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "showdown_server/flag",
+          "bytes": 64,
+          "sha256": "d3e7b4ef776c6e57b0d3cc8e567a4dbec57da73cb81f3b881da3e20cd7d53ee3",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "showdown_server/serve.sh",
+          "bytes": 101,
+          "sha256": "6ee8c7696a982c8da5709dbf8200a71e5604eb8bb91f6154615d62aaaec8e06e",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "showdown_server/showdown",
+          "bytes": 319,
+          "sha256": "91314f88fac87d937743c382eab50907da97b8e6e144aaed966ba8402db8380a",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 271,
+          "sha256": "187278b75a918f459f5d5ef608533d38004a6b7c3045e0348ca261b59e8abdd6",
+          "role": "oracle_or_solution_private"
+        }
+      ],
+      "proposed_pilot_mode": null,
+      "admission_status": "not_admitted",
+      "answer_leak_review_status": "potential_answer_leak",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 1,
+        "execution_smokes": 0,
+        "findings": [
+          {
+            "path": "showdown.tar.gz",
+            "oracle_forms_found": [],
+            "flag_shaped_strings": 0,
+            "normalized_oracle_match": false,
+            "archive_content_status": "scanned",
+            "archive_has_solution_named_member": true,
+            "scan_status": {
+              "raw_input": "complete",
+              "strings": "complete",
+              "file_command": "complete",
+              "archive_content": "scanned"
+            }
+          }
+        ],
+        "execution_findings": []
+      }
+    },
+    {
+      "id": "msc-quantum-leap",
+      "category": "misc",
+      "name": "Quantum Leap",
+      "source_path": "ctftiny/msc/quantum-leap",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2022-Quals/tree/master/misc/quantum-leap",
+      "environment_kind": "remote_endpoint_do_not_connect",
+      "compose_declared": false,
+      "remote_box_declared": true,
+      "internal_port": null,
+      "declared_input_paths": [
+        "ctftiny/msc/quantum-leap/output"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "33bf192f4423b03f34288ecebc88e2a6b18de67aab8b7d2274e5c5031ba37e9c",
+      "review_status": "admitted_private_local_pilot",
+      "document_review_findings": [],
+      "files": [
+        {
+          "path": "README.md",
+          "bytes": 348,
+          "sha256": "29ca302e0ebf12966d3c6430f36b4622b099d00cb606509d851370c73691981b",
+          "role": "prompt_or_document_review_required"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 572,
+          "sha256": "33bf192f4423b03f34288ecebc88e2a6b18de67aab8b7d2274e5c5031ba37e9c",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "output",
+          "bytes": 21,
+          "sha256": "b451914ce06673e6a2628ac4e7e4ee6f85bf00293c5773c9113d22ea12747097",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "test_solver/solution.py",
+          "bytes": 399,
+          "sha256": "f75555f10dee01dc2b1a6b22ce1906fcc18b9b9e1b4bef41f425cb7875311b60",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 231,
+          "sha256": "796a9c9ec67190f0c248ea1cc9046b1ffe13374183c452324047d137b98fb32c",
+          "role": "oracle_or_solution_private"
+        }
+      ],
+      "proposed_pilot_mode": "offline_artifact_only",
+      "admission_status": "admitted",
+      "answer_leak_review_status": "no_obvious_answer_leak",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 1,
+        "execution_smokes": 0,
+        "findings": [],
+        "execution_findings": []
+      },
+      "formal_admission_scope": "private local artifact pilot only; no model data transfer"
+    },
+    {
+      "id": "rev-ezbreezy",
+      "category": "rev",
+      "name": "ezbreezy",
+      "source_path": "ctftiny/rev/ezbreezy",
+      "upstream_reference": "https://github.com/osirislab/CSAW-CTF-2020-Quals/tree/master/rev/ezbreezy",
+      "environment_kind": "remote_endpoint_do_not_connect",
+      "compose_declared": false,
+      "remote_box_declared": true,
+      "internal_port": null,
+      "declared_input_paths": [
+        "ctftiny/rev/ezbreezy/app"
+      ],
+      "declared_inputs_missing": [],
+      "declared_inputs_containing_exact_oracle": [],
+      "oracle_metadata_has_flag_field": true,
+      "oracle_metadata_sha256": "0dd4f9a54e98b736e8fd34a91476f5d1a322487d4b6cc9e8fe16f42924b1bc17",
+      "review_status": "admitted_private_local_pilot",
+      "document_review_findings": [],
+      "files": [
+        {
+          "path": "Makefile",
+          "bytes": 82,
+          "sha256": "1239c387e2d4f50ceb1716ddcd517a3fca7212e2a572aa812c059314a182a512",
+          "role": "environment_setup_review_required"
+        },
+        {
+          "path": "README.md",
+          "bytes": 246,
+          "sha256": "97feb549a510321fde9bfa703a3883cab7839c1e4e65527f529fec56a4d4046f",
+          "role": "prompt_or_document_review_required"
+        },
+        {
+          "path": "app",
+          "bytes": 15504,
+          "sha256": "7d13371fc2ada542290fa5d0f3e1875af595893fa8a02385ffc731273f01c555",
+          "role": "challenge_input_candidate"
+        },
+        {
+          "path": "app.c",
+          "bytes": 377,
+          "sha256": "49ad47fd1989cd5f7f4afb68ff56f724e1510f16eeac54dc42f1f29e8f755818",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "challenge.json",
+          "bytes": 312,
+          "sha256": "0dd4f9a54e98b736e8fd34a91476f5d1a322487d4b6cc9e8fe16f42924b1bc17",
+          "role": "oracle_metadata_private"
+        },
+        {
+          "path": "flag.txt",
+          "bytes": 26,
+          "sha256": "9dde36428028bb734615f43020d5f5c469e0e8dfab2fdb1944cd543d9a225d4a",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "generate.py",
+          "bytes": 1589,
+          "sha256": "51f737404af746f5232f49fb17b2b82a31749dd4c2d7404b0070b91e5df1dde1",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "generated.asm",
+          "bytes": 13365,
+          "sha256": "b396db84329d0211551c5e987708cb883040e82cfa263d1e24be7b19d98d5316",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "generated.c",
+          "bytes": 1956,
+          "sha256": "7413794ebedee552e0daa28db4fffe726472eabcb82e23ce37b044e416948a9d",
+          "role": "not_available_to_agent_until_review"
+        },
+        {
+          "path": "hints/implementation.md",
+          "bytes": 227,
+          "sha256": "fffa722b63cff2185b97b4342c1e14a594453e6561ad0badc802efc6d854abaa",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "hints/solution.md",
+          "bytes": 329,
+          "sha256": "78373d87665faf008866fbe9d7a1e2bb0ab1bfa107feb0a9ea8cbfc5af41ba26",
+          "role": "oracle_or_solution_private"
+        },
+        {
+          "path": "test_solver/test.sh",
+          "bytes": 219,
+          "sha256": "65b5b236c86649fa4a73a2e76962981444f3374f7e1b81ff229a95f137e9155e",
+          "role": "oracle_or_solution_private"
+        }
+      ],
+      "proposed_pilot_mode": "offline_artifact_only",
+      "admission_status": "admitted",
+      "answer_leak_review_status": "no_obvious_answer_leak",
+      "oracle_acceptance_status": "provisionally_accepted_by_user_reopen_on_evaluation_failure",
+      "model_data_authorized": false,
+      "model_data_authorization_basis": null,
+      "attachment_review_summary": {
+        "declared_files_reviewed": 1,
+        "execution_smokes": 1,
+        "findings": [],
+        "execution_findings": []
+      },
+      "formal_admission_scope": "private local artifact pilot only; no model data transfer"
+    }
+  ],
+  "formal_admission_scope": "private local artifact pilot only; admission does not authorize model data transfer or new executable smoke tests"
+}
