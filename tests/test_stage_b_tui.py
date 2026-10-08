@@ -20,10 +20,10 @@ from ctfbot.tui.safe_text import safe_plain_text
 
 IMAGE = "sha256:" + "c" * 64
 CANDIDATE = "CTFBOT_SYNTHETIC{tui_secret_value}"
-REJECTED_CANDIDATE = "CTFBOT_SYNTHETIC{tui_wrong_value}"
+ALTERNATE_CANDIDATE = "CTFBOT_SYNTHETIC{tui_wrong_value}"
 
 
-def make_workspace(root: Path, *, authorized: bool = True) -> tuple[Path, Path]:
+def make_workspace(root: Path, *, authorized: bool = True) -> Path:
     workspace = root / "workspace"
     input_root = workspace / "input"
     input_root.mkdir(parents=True, mode=0o700)
@@ -55,17 +55,7 @@ def make_workspace(root: Path, *, authorized: bool = True) -> tuple[Path, Path]:
     }
     (workspace / "provenance.json").write_text(json.dumps(provenance), encoding="utf-8")
     os.chmod(workspace / "provenance.json", 0o444)
-    private = root / "private"
-    private.mkdir(mode=0o700)
-    oracle = private / "oracle.json"
-    oracle.write_text(json.dumps({
-        "challenge_id": "stage-b-tui",
-        "source_commit": "synthetic-commit",
-        "challenge_metadata_sha256": metadata_hash,
-        "flag": CANDIDATE,
-    }), encoding="utf-8")
-    os.chmod(oracle, 0o600)
-    return workspace, oracle
+    return workspace
 
 
 class QuietRuntime:
@@ -93,9 +83,8 @@ def make_service(model_factory, runtime_factory=None) -> LocalChallengeService:
     )
 
 
-def fill_fields(app: CTFBotApp, workspace: Path, oracle: Path, runs_root: Path) -> None:
+def fill_fields(app: CTFBotApp, workspace: Path, runs_root: Path) -> None:
     app.query_one("#workspace-path", Input).value = str(workspace)
-    app.query_one("#oracle-path", Input).value = str(oracle)
     app.query_one("#runtime-image", Input).value = IMAGE
     app.query_one("#runs-root", Input).value = str(runs_root)
 
@@ -192,13 +181,13 @@ def test_preview_denies_unapproved_transfer_before_run(tmp_path: Path) -> None:
 
 
 async def _preview_denies_unapproved_transfer_before_run(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path, authorized=False)
+    workspace = make_workspace(tmp_path, authorized=False)
     calls: list[str] = []
     service = make_service(lambda: calls.append("model"), lambda *_: calls.append("runtime"))
     app = CTFBotApp(service=service, runtime_image=IMAGE, runs_root=tmp_path / "runs")
 
     async with app.run_test(size=(80, 24)) as pilot:
-        fill_fields(app, workspace, oracle, tmp_path / "runs")
+        fill_fields(app, workspace, tmp_path / "runs")
         await pilot.click("#preview")
         await pilot.pause(0.1)
 
@@ -212,14 +201,14 @@ def test_tui_runs_synthetic_case_shows_evidence_and_generates_report(tmp_path: P
 
 
 async def _tui_runs_synthetic_case_shows_evidence_and_generates_report(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path)
-    model = FakeModelSession((ScriptedTurn(tool_calls=(ToolCall("candidate_submit", {"candidate": CANDIDATE}),)),))
+    workspace = make_workspace(tmp_path)
+    model = FakeModelSession((ScriptedTurn(tool_calls=(ToolCall("candidate_submit", {"candidate": CANDIDATE}), ToolCall("run_complete", {"outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Retain candidate", "unresolved": ["competition confirmation"]}),)),))
     service = make_service(lambda: model)
     app = CTFBotApp(service=service, runtime_image=IMAGE, runs_root=tmp_path / "runs",
                     limits=RunLimits(max_turns=1, max_tool_calls=2))
 
     async with app.run_test(size=(80, 24)) as pilot:
-        fill_fields(app, workspace, oracle, tmp_path / "runs")
+        fill_fields(app, workspace, tmp_path / "runs")
         await pilot.click("#preview")
         await pilot.pause(0.1)
         assert "cipher.bin" in static_text(app, "#preview-details")
@@ -231,7 +220,7 @@ async def _tui_runs_synthetic_case_shows_evidence_and_generates_report(tmp_path:
                 break
 
         assert app.last_result is not None
-        assert app.last_result.verified is True
+        assert app.last_result.status == "candidate_unverified"
         assert "verified" in static_text(app, "#status").lower()
         assert CANDIDATE in "\n".join(app.displayed_events)
         assert app.query_one("#evidence").disabled is False
@@ -246,25 +235,25 @@ async def _tui_runs_synthetic_case_shows_evidence_and_generates_report(tmp_path:
         assert app.last_report_path is not None and app.last_report_path.is_file()
         report = app.last_report_path.read_text(encoding="utf-8")
         assert CANDIDATE not in report
-        assert "exact-string controller-only" in report
+        assert "model-selected candidate; correctness unverified" in report
         app.exit()
 
 
-def test_tui_records_rejected_flag_candidate_without_marking_run_verified(tmp_path: Path) -> None:
-    asyncio.run(_tui_records_rejected_flag_candidate_without_marking_run_verified(tmp_path))
+def test_tui_records_alternate_candidate_without_automatically_completing(tmp_path: Path) -> None:
+    asyncio.run(_tui_records_alternate_candidate_without_automatically_completing(tmp_path))
 
 
-async def _tui_records_rejected_flag_candidate_without_marking_run_verified(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path)
+async def _tui_records_alternate_candidate_without_automatically_completing(tmp_path: Path) -> None:
+    workspace = make_workspace(tmp_path)
     model = FakeModelSession((ScriptedTurn(
-        tool_calls=(ToolCall("candidate_submit", {"candidate": REJECTED_CANDIDATE}),)
+        tool_calls=(ToolCall("candidate_submit", {"candidate": ALTERNATE_CANDIDATE}),)
     ),))
     service = make_service(lambda: model)
     app = CTFBotApp(service=service, runtime_image=IMAGE, runs_root=tmp_path / "runs",
                     limits=RunLimits(max_turns=1, max_tool_calls=2))
 
     async with app.run_test(size=(80, 24)) as pilot:
-        fill_fields(app, workspace, oracle, tmp_path / "runs")
+        fill_fields(app, workspace, tmp_path / "runs")
         await pilot.click("#preview")
         await pilot.pause(0.1)
         await pilot.click("#run")
@@ -274,10 +263,10 @@ async def _tui_records_rejected_flag_candidate_without_marking_run_verified(tmp_
                 break
 
         assert app.last_result is not None
-        assert app.last_result.verified is False
-        assert app.candidate_status == "rejected"
-        assert REJECTED_CANDIDATE in "\n".join(app.displayed_events)
-        assert "rejected" in "\n".join(app.displayed_events)
+        assert app.last_result.status == "budget_exhausted"
+        assert app.candidate_status == "unverified"
+        assert ALTERNATE_CANDIDATE in "\n".join(app.displayed_events)
+        assert "unverified" in "\n".join(app.displayed_events)
         app.exit()
 
 
@@ -286,7 +275,7 @@ def test_stop_action_cancels_blocked_model_without_freezing_ui(tmp_path: Path) -
 
 
 async def _stop_action_cancels_blocked_model_without_freezing_ui(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path)
+    workspace = make_workspace(tmp_path)
     started = threading.Event()
     released = threading.Event()
 
@@ -311,7 +300,7 @@ async def _stop_action_cancels_blocked_model_without_freezing_ui(tmp_path: Path)
                     limits=RunLimits(max_turns=1, max_tool_calls=2))
 
     async with app.run_test(size=(80, 24)) as pilot:
-        fill_fields(app, workspace, oracle, tmp_path / "runs")
+        fill_fields(app, workspace, tmp_path / "runs")
         await pilot.click("#preview")
         await pilot.pause(0.1)
         assert app.query_one("#run").disabled is False, app.status_text
@@ -335,7 +324,7 @@ def test_provider_error_event_does_not_display_submitted_candidate(tmp_path: Pat
 
 
 async def _provider_error_event_does_not_display_submitted_candidate(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path)
+    workspace = make_workspace(tmp_path)
     leak_candidate = "CTFBOT_SYNTHETIC{candidate_must_stay_private}"
 
     class FailingModel:
@@ -352,7 +341,7 @@ async def _provider_error_event_does_not_display_submitted_candidate(tmp_path: P
                     limits=RunLimits(max_turns=1, max_tool_calls=2))
 
     async with app.run_test(size=(80, 24)) as pilot:
-        fill_fields(app, workspace, oracle, tmp_path / "runs")
+        fill_fields(app, workspace, tmp_path / "runs")
         await pilot.click("#preview")
         await pilot.pause(0.1)
         await pilot.click("#run")

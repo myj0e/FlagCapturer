@@ -7,7 +7,7 @@ root = pathlib.Path('/challenge')
 path = root / relative
 out = {'passed': False, 'verified': False, 'validation_level': 'local_check',
        'checker': operation + ':v1', 'source_path': relative,
-       'limitation': 'Only the specified relation is checked; this is not a trusted oracle.'}
+       'limitation': 'Only the specified relation is checked; this is not a proof of flag correctness.'}
 try:
     if path.is_symlink() or not path.resolve().is_relative_to(root):
         raise ValueError('input path escapes challenge')

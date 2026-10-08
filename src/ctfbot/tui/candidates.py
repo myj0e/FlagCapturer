@@ -38,16 +38,13 @@ class CandidateScreen(ModalScreen[None]):
     def __init__(self, candidates: tuple[FlagCandidate, ...]) -> None:
         super().__init__()
         self.candidates = candidates
-        # Prefer a verified answer; otherwise show the most recent submission.
-        self.selected_index = next((i for i in reversed(range(len(candidates)))
-                                    if candidates[i].status == "verified"), len(candidates) - 1)
+        self.selected_index = len(candidates) - 1
 
     def compose(self) -> ComposeResult:
         with Vertical(id="candidate-dialog"):
             yield Static("候选 flag · 选择并复制", id="candidate-title")
             if self.candidates:
-                labels = {"verified": "已验证", "rejected": "验证未通过", "unverified": "未验证",
-                          "format_only": "未验证（历史格式匹配）", "format_mismatch": "未验证（历史格式不匹配）"}
+                labels = {"unverified": "未验证"}
                 yield Select([(Text(f"{safe_plain_text(c.candidate_id)} · {labels.get(c.status, safe_plain_text(c.status))} · {safe_plain_text(c.value)[:60]}"), i)
                               for i, c in enumerate(self.candidates)],
                              value=self.selected_index, allow_blank=False, id="candidate-select")

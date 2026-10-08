@@ -6,13 +6,13 @@ FlagCapturer（命令名和 Python 包名为 `ctfbot`）旨在把 CTF 选手的�
 
 ## 项目状态
 
-当前版本 `0.1.0` 仍是开发基线，不是可自动解题的完整 agent。阶段 A 已增加 headless 单 agent loop、临时 ChatGPT/Codex adapter、离线 synthetic verifier/evidence 路径、Docker runtime adapter 和 pilot batch runner。10 道 CTFTiny 题目已正式准入为私有本地 pilot 并生成仓库外快照；题目数据没有上传到项目，正式快照仍未授权发送给模型。真实 CTF batch baseline 尚未运行。
+当前版本 `0.1.0` 提供单题 CLI/TUI、受预算约束的单 agent、Docker 工具沙箱、证据与报告、六类工作流、候选流程评测和命令回放。真实解题需要配置 Codex 模型，并逐题授权附件及工具输出的模型传输。
 
-阶段 B 已实现最小 Textual 单题工作流：预览 importer 生成的私有 workspace、检查逐题模型传输授权、运行/停止 bounded 单 agent、查看 evidence 并生成基础报告。TUI 与 headless `solve` 共用 application service。合成测试覆盖了授权拒绝、候选验证、报告和取消；该阶段合成验收没有启动真实模型、Docker 或 CTF 附件；阶段 C2 的 Docker 实机补验见下文。Docker CLI 仍是候选 runtime，provider usage 和真实取消兼容性也未完整验收。阶段 A 记录和限制见[阶段 A 施工记录](doc/phase-a/README.md)，整体路线见[详细实施计划](doc/AI_CTF_AGENT_DETAILED_PLAN.md)。
+程序记录模型选出的 flag 候选及证据，不内置已知答案验证。用户在比赛平台确认候选；局部校验、模型说明和命令成功均不表示答案正确。`candidate_submit` 不结束运行，模型可继续检查，再通过 `run_complete` 结束为 `candidate_unverified` 或 `unsolved`。
 
-阶段 C1 已为每次 run 增加持久状态、失败/超时/停止/清理记录，以及未完成 run 的部分 evidence 报告；不会自动重试或恢复运行，操作建议是检查已有 evidence 后启动新 run。C2 已加入受限的 run-local 交互 session、PTY-backed Docker CLI 适配和私有 transcript，并通过合成 backend 验收；2026-10-07 已通过真实 Docker PTY 跨轮输入/输出、关闭、取消及缩短时限的空闲/总时限检查，全部容器确认删除；现有回归 74 项通过（含 9 项 TUI）。验收范围见[Docker session 实机记录](doc/phase-c/docker-session-acceptance.md)。C3 已实现单个本地 TCP 服务的配置、合成导入、候选 Docker adapter、健康检查和清理闭环；已用真实 Docker 合成服务通过双 run 网络隔离和 7 条生命周期验收，现有 74 项回归通过；第三增量已接入受审 profile、持久恢复记录和独立 Docker 请求进程，通过三类超时回执恢复及实际 solve 入口验收。本地已配置仅限该合成 fixture 的 profile，TUI/solve 按固定镜像、命令、端口和节点校验启用；逐题模型传输授权仍单独检查。见[C3 启用与恢复](doc/phase-c/service-activation.md)。C4 已加入候选受控 TCP 工具与独立 controller 授权/IP 固定，已接入持久 Docker 请求恢复、受审启用及管理命令；首个受控 TCP 闭环已通过 28 项必需合成验收及额外 HTTP 路径拒绝，临时受审 profile 的真实 CLI/TUI 通过；测试端点已停止，项目默认远端 profile 未安装。见 [C4 实机验收](doc/phase-c/remote-acceptance.md)。阶段 C 记录见[阶段 C 记录](doc/phase-c/README.md)。
+开发历史保留在 [阶段 A](doc/phase-a/README.md)、[阶段 C](doc/phase-c/README.md)和[阶段 D](doc/phase-d/README.md)。其中早期精确答案验证和 Stage A pilot 原型已退役，当前接口与迁移说明见[代码整理说明](doc/code-cleanup.md)。
 
-阶段 D 首轮基础实现已加入六类可发现工作流、环境检查、脚本与产物 lineage、v2 受控评测、离线命令审计/回放和四 namespace 受审记忆。可用 `ctfbot packs` 查看手册，`ctfbot fixtures` 创建自建六类题目，`ctfbot evaluate` 在明确预算与授权后运行评测。最新全量自动化测试 100 项通过；六类 Docker 基础闭环、25 个命令回放检查点、Reverse/Pwn PTY、随机 holdout 6/6 与通用记忆引用/撤销已验收。D 最终验收仍待多机制样本、工具扩展与真实受控评估。未调用真实模型或私有题目；默认不读取跨题记忆，未安装项目默认远端 profile。入口、限制与剩余门槛见 [阶段 D 记录](doc/phase-d/README.md)。
+长运行可通过 `state_read` 找回摘要历史、失败实验、脚本、会话和显式导出的检查点。续轮自动提供有界状态快照，长工具输出提供头尾预览与原始证据定位。普通回复、状态恢复和收尾各有独立额度，字节额度与模型上下文占用分开记录。观测到 Codex 压缩完成时会补发状态；当前窗口占用缺少可靠计数时显示未知。实现边界与验收见[上下文管理实施记录](doc/phase-d/agent-context-management-implementation.md)。
 
 ## 快速开始
 
@@ -29,7 +29,7 @@ ctfbot doctor
 ctfbot
 ```
 
-`ctfbot doctor` 显示基线环境状态；`ctfbot baseline-smoke` 运行不联网、不触碰题目数据的合成闭环。`ctfbot solve` 与 `ctfbot baseline` 只接受正式准入的本地 pilot；它们需要 digest 固定的工具镜像、逐题模型传输授权，并且必须显式传 `--confirm-model-usage` 才会使用模型额度。现有正式快照尚未获准传输，因此不能直接跑真实 pilot。
+`ctfbot doctor` 显示基线环境状态；`ctfbot baseline-smoke` 运行不联网、不触碰题目数据的合成闭环。`ctfbot solve` 与 `ctfbot evaluate` 需要不可变工具镜像、逐题模型传输授权，并且必须显式传 `--confirm-model-usage` 才会使用模型额度。合成 smoke 不调用模型。
 
 ### 使用最小 TUI
 
@@ -43,13 +43,13 @@ ctfbot
 
 长脚本可使用 `script_save → script_start → session_read`：后台执行不受普通命令的 120 秒限制，模型根据进度、运行时长与无输出时长决定继续等待或 `session_close`。仍受整次解题预算（默认最多 30 分钟）和输出上限约束。提示词要求定期输出进度并保存检查点；普通命令超时会尽量保留沙箱，必须关闭沙箱时立即终止本次解题。详见 [命令超时与长任务脚本](doc/phase-d/command-timeouts.md)。
 
-**未知 flag 时将 Oracle 留空**，补充提示词可填写线索、已知 flag 格式或解题偏好，也可留空。由模型结合证据识别候选并提交原文，不执行格式检查。无 oracle 的候选为 `unverified`，模型可继续检查；显式结束时结果为 `candidate_unverified`，候选需由你在比赛平台确认。证据不足时可明确以 `unsolved` 结束。若提供外置 private oracle，则进行已知答案精确验证，只有匹配才能为 `verified`。
+补充提示词可填写线索、已知 flag 格式或解题偏好，也可留空。模型结合证据识别候选并提交原文，不执行格式检查。候选状态为 `unverified`，模型可继续做局部检查；显式结束时结果为 `candidate_unverified`，候选需由你在比赛平台确认。证据不足时可明确以 `unsolved` 结束。
 
-运行镜像自动填写，私有输出默认 `runs/stage-b`。点击 **Preview** 检查附件 hash、模型传输授权、验证方式和预算，然后 **Run**；未获题目授权或输入不符合准入策略时仍阻止启动。**Stop** 请求终止模型和 sandbox；完成后点击 **Flag** 打开候选窗口，选择答案并点击“复制 flag”；复制保留完整原文，通过终端 OSC 52 写入剪贴板（终端需允许此功能）。窗口可重复打开，**Evidence** 显示候选及状态，**Report** 生成 `report.md`，报告不复制原始候选。TUI 的“补充提示词（可选）”可填写解题线索和已知 flag 格式，留空即可运行。无 oracle 的 `solve` 支持省略 `--oracle`，通过 `--additional-prompt 'Flag 前缀为 SUCTF'` 提供提示。候选由 LLM 判断并提交，不执行格式检查；`candidate_unverified` 的退出码为 0 表示已结束并记录候选，不证明答案正确；`unsolved`、预算耗尽或错误退出为 1。旧版 `format_only` 日志保留原解释。严格 benchmark/evaluate 仍使用带 oracle 的数据集。
+运行镜像自动填写，私有输出默认 `runs/stage-b`。点击 **Preview** 检查附件 hash、模型传输授权、验证方式和预算，然后 **Run**；未获题目授权或输入不符合准入策略时仍阻止启动。**Stop** 请求终止模型和 sandbox；完成后点击 **Flag** 打开候选窗口，选择答案并点击“复制 flag”；复制保留完整原文，通过终端 OSC 52 写入剪贴板（终端需允许此功能）。窗口可重复打开，**Evidence** 显示候选及状态，**Report** 生成 `report.md`，报告不复制原始候选。TUI 的“补充提示词（可选）”可填写解题线索和已知 flag 格式，留空即可运行。`solve` 通过 `--additional-prompt 'Flag 前缀为 SUCTF'` 提供提示。候选由 LLM 判断并提交，不执行格式检查；`candidate_unverified` 的退出码为 0 表示已结束并记录候选，不证明答案正确；`unsolved`、预算耗尽或错误退出为 1。`evaluate` 使用无答案文件的 v3 数据集，统计候选记录、显式结束、错误、预算和证据，不衡量答案正确率。
 
 TUI 启动后会在后台查找本机 **`ctfbot-tools:candidate`（general-v2）**，将其解析为不可变 `sha256` image ID 并自动填入 **Runtime (automatic)**。正常使用无需复制镜像 ID；该字段保留手动覆盖。镜像预装 Python 解题库、GDB/binutils、32/64 位 GCC/G++、常用归档/取证工具，以及 Node、Ruby、Perl、Java 环境；完整清单、构建和验收步骤见[通用工具镜像](doc/phase-d/tool-image.md)。未找到镜像或 Docker 不可用时显示准备提示；准备完成后再次 Preview 会重试查找。查找只执行本地 image inspect，不拉取镜像、不启动容器或模型。原最小 fixture 镜像保留供固定服务 profile 使用。
 
-TUI 可预览 C3 合成服务快照的 endpoint 和运行阻断原因；本地服务仅在受审 profile 匹配时可运行，远端题仅在 C4 完整验收记录、独立 grant 和受审 profile 匹配时可运行；本机尚未配置远端 profile。题目描述不能启用网络。模型传输授权由 workspace provenance 中该题的 `model_data_authorized` 和非空授权依据决定；再次运行也会重新检查 admission、路径、附件 hash、oracle 和 digest 固定的 image。不要把 oracle 文件放进 workspace 或 runs 目录。
+TUI 可预览 C3 合成服务快照的 endpoint 和运行阻断原因；本地服务仅在受审 profile 匹配时可运行，远端题仅在 C4 完整验收记录、独立 grant 和受审 profile 匹配时可运行；本机尚未配置远端 profile。题目描述不能启用网络。模型传输授权由 workspace provenance 中该题的 `model_data_authorized` 和非空授权依据决定；再次运行也会重新检查 admission、路径、附件 hash 和不可变 image。
 
 ### 受审本地服务
 
@@ -80,7 +80,7 @@ ctfbot llm tool-smoke
 - 单个主 agent 共享跨领域上下文，并依据证据选择工具；多 agent 通过后续消融实验决定是否引入。
 - 让工具返回短摘要和证据引用，同时保存原始输入、输出、脚本、事件和产物。
 - 通过有预算和授权边界的 sandbox 执行命令、临时脚本及交互式会话。
-- 区分 flag 候选、格式命中和经过 oracle/validator 验证的结果。
+- 记录 flag 候选的原文、来源和局部检查，最终由用户在比赛平台确认。
 - TUI 与 headless 诊断、报告、批量评测共用同一 application service。
 
 以上是设计目标，不代表当前版本已实现这些功能。详细边界和阶段验收见设计文档。
@@ -104,7 +104,7 @@ src/ctfbot/
 doc/                  # 调研、设计计划和项目基线
 ```
 
-当前代码覆盖单题 TUI/headless、生命周期、交互 session、固定本地服务、受控 TCP、六类基础工作流、评测、命令回放和受审记忆；各模式的实测范围见阶段记录。批量真实 baseline、多机制领域扩展及更广 provider/runtime 验收仍在后续路线中。
+当前代码覆盖单题 TUI/headless、生命周期、交互 session、固定本地服务、受控 TCP、六类基础工作流、评测、命令回放和受审记忆；各模式的实测范围见阶段记录。真实模型评测、多机制领域扩展及更广 provider/runtime 验收仍在后续路线中。
 
 ## 开发约定
 

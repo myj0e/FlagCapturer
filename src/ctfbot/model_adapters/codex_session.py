@@ -10,11 +10,14 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from ctfbot.model_adapters.codex_app_server import CodexAppServer, CodexAppServerError, find_codex_cli
+from ctfbot.model_adapters.events import CODEX_CONTEXT_CAPABILITIES
 from ctfbot.model_adapters.protocol import ModelSession, ToolCall, ToolHandler, ToolReply, ToolSpec, TurnResult
 
 
 class CodexModelSession(ModelSession):
     """A single model thread using experimental dynamic tools from Codex CLI."""
+
+    context_capabilities = CODEX_CONTEXT_CAPABILITIES
 
     def __init__(self, model: str, effort: str | None = None, *, executable: str | None = None,
                  timeout: float = 1800) -> None:
@@ -28,6 +31,7 @@ class CodexModelSession(ModelSession):
         self._closed = False
         self._cancelled = threading.Event()
         self.turns_started = 0
+        self._event_handler: Callable[[dict], None] | None = None
         self._message_handler: Callable[[str], None] | None = None
         try:
             self._server.start()
@@ -37,6 +41,9 @@ class CodexModelSession(ModelSession):
         except Exception:
             self.close()
             raise
+
+    def set_event_handler(self, handler: Callable[[dict], None]) -> None:
+        self._event_handler = handler
 
     def set_message_handler(self, handler: Callable[[str], None]) -> None:
         """Observe public agentMessage items, never private reasoning content."""
@@ -71,6 +78,8 @@ class CodexModelSession(ModelSession):
             reply: ToolReply = on_tool_call(call)
             return {"content": reply.content, "success": reply.success}
 
+        event_handler = getattr(self, "_event_handler", None)
+        event_options = {"on_event": event_handler} if event_handler else {}
         self.turns_started += 1
         try:
             result = self._server.run_dynamic_turn(
@@ -83,6 +92,7 @@ class CodexModelSession(ModelSession):
                 effort=self.effort,
                 timeout=min(timeout, self.timeout),
                 on_message=self._message_handler,
+                **event_options,
             )
         except CodexAppServerError as exc:
             if "timed out" in str(exc).lower() or "timeout" in str(exc).lower():

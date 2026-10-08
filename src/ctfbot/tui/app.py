@@ -134,9 +134,6 @@ class CTFBotApp(App[None]):
                     yield Label("File model transfer", classes="form-label")
                     yield FileTransferCheckbox("未允许 / OFF：附件与工具输出不可发送给模型（点击允许）", id="file-model-transfer")
                 with Horizontal(classes="form-row"):
-                    yield Label("Oracle (optional)", classes="form-label")
-                    yield SafePathInput(placeholder="Leave blank when the flag is unknown", id="oracle-path")
-                with Horizontal(classes="form-row"):
                     yield Label("补充提示词（可选）", classes="form-label")
                     yield SafePathInput(value=self.additional_prompt, placeholder="可填写解题线索、已知 flag 格式或其他提示", id="additional-prompt")
                 with Horizontal(classes="form-row"):
@@ -289,14 +286,14 @@ class CTFBotApp(App[None]):
         self.query_one("#evidence", Button).disabled = True
         self.query_one("#report", Button).disabled = True
         try:
-            workspace, oracle, image, runs_root = self._input_paths()
+            workspace, image, runs_root = self._input_paths()
             attachment = select_single_attachment(workspace)
             if attachment is not None:
                 if self.imports_root.resolve().is_relative_to(runs_root.resolve()) or runs_root.resolve().is_relative_to(self.imports_root.resolve()):
                     raise ValueError("challenge imports and run output directories must be disjoint")
                 workspace = import_single_file(attachment, self.imports_root,
                     authorize_model_data=self.query_one("#file-model-transfer", Checkbox).value)
-            preview = self.service.preview(workspace, oracle, image, runs_root, self.limits,
+            preview = self.service.preview(workspace, image, runs_root, self.limits,
                                            additional_prompt=self.query_one("#additional-prompt", Input).value)
         except Exception as exc:
             self._preview = None
@@ -376,7 +373,7 @@ class CTFBotApp(App[None]):
                              "Run blocked: this challenge is not authorized for model transfer.")
             return
         try:
-            workspace, oracle, image, runs_root = self._input_paths()
+            workspace, image, runs_root = self._input_paths()
         except ValueError as exc:
             self._set_status(f"Run blocked: {safe_plain_text(str(exc))}")
             return
@@ -419,7 +416,6 @@ class CTFBotApp(App[None]):
             try:
                 result = self.service.run(
                     workspace,
-                    oracle,
                     image,
                     runs_root,
                     self.limits,
@@ -474,11 +470,7 @@ class CTFBotApp(App[None]):
         self.query_one("#report", Button).disabled = False
         self.query_one("#candidates", Button).disabled = False
         self.query_one("#run", Button).disabled = True
-        if result.status == "verified":
-            message = f"Run verified by controller exact-string verifier. Evidence: {result.run_dir}"
-        elif result.status == "format_only":
-            message = f"Candidate matches the flag format; correctness is unverified. Evidence: {result.run_dir}"
-        elif result.status == "candidate_unverified":
+        if result.status == "candidate_unverified":
             message = f"已结束，保留未验证候选；correctness is unverified。Evidence: {result.run_dir}"
         elif result.status == "unsolved":
             message = f"本次尝试未解出，未声称题目无解。Evidence: {result.run_dir}"
@@ -818,9 +810,8 @@ class CTFBotApp(App[None]):
             return
         self._set_status(f"Basic report written to {safe_plain_text(str(self.last_report_path))}")
 
-    def _input_paths(self) -> tuple[Path, Path | None, str, Path]:
+    def _input_paths(self) -> tuple[Path, str, Path]:
         workspace = self.query_one("#workspace-path", Input).value.strip()
-        oracle = self.query_one("#oracle-path", Input).value.strip()
         image = self.query_one("#runtime-image", Input).value.strip()
         runs_root = self.query_one("#runs-root", Input).value.strip()
         if not all((workspace, runs_root)):
@@ -833,7 +824,7 @@ class CTFBotApp(App[None]):
                 raise ValueError(choice.message)
             image = choice.image
             self.query_one("#runtime-image", Input).value = image
-        return Path(workspace), Path(oracle) if oracle else None, image, Path(runs_root)
+        return Path(workspace), image, Path(runs_root)
 
     def _set_preview(self, value: str) -> None:
         self._preview_text = "\n".join(safe_plain_text(line) for line in value.split("\n"))

@@ -2,7 +2,7 @@
 
 2026-10-07：**六类基础合成闭环验收通过，阶段 D 最终验收仍有剩余项。** 六类 development 题在真实 Docker 中 verified、报告/审计通过、25 个命令检查点回放 matched；Reverse/Pwn 真实 PTY 通过；独立随机 holdout 6/6 verified。显式 generic memory 的读取/引用、撤销与快照保留通过。C4 首个受控 TCP 的 28 项必需用例及受审 CLI/TUI 通过。最新全量测试 **100 passed in 13.05s**。未调用真实模型、未运行私有题目、未安装项目默认远端 profile。详见 [D 合成实机验收](docker-acceptance.md)及 [C4 实机验收](../phase-c/remote-acceptance.md)。
 
-上下文管理增量计划：见 [Agent 上下文管理改进计划](agent-context-management-plan.md)，当前为设计待实施；按状态找回、长输出、预算、压缩观测与恢复逐步交付。
+上下文管理增量计划：见 [Agent 上下文管理改进计划](agent-context-management-plan.md)，CM01–CM06 已实施，详见[上下文实施记录](agent-context-management-implementation.md)。确定性测试与真实 Docker 验收通过，真实模型效果对照未执行。
 
 ## 六类覆盖矩阵
 

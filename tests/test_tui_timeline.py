@@ -62,7 +62,7 @@ def test_codex_session_forwards_public_message_callback_without_starting_real_pr
 
 
 def test_rounds_show_public_analysis_tool_arguments_and_returns_with_expanded_log(tmp_path):
-    workspace, oracle = make_workspace(tmp_path)
+    workspace = make_workspace(tmp_path)
 
     class ObservedModel:
         index = 0
@@ -74,6 +74,8 @@ def test_rounds_show_public_analysis_tool_arguments_and_returns_with_expanded_lo
             self.message(text)
             on_tool_call(ToolCall('command_run', {'argv': ['file', '/challenge/cipher.bin']})) if self.index == 1 else \
                 on_tool_call(ToolCall('candidate_submit', {'candidate': CANDIDATE}))
+            if self.index == 2:
+                on_tool_call(ToolCall('run_complete', {'outcome': 'candidate_unverified', 'candidate_id': 'candidate-1', 'summary': 'Retain candidate', 'unresolved': []}))
             return TurnResult(text=text, tool_calls=1)
         def close(self):
             pass
@@ -87,7 +89,6 @@ def test_rounds_show_public_analysis_tool_arguments_and_returns_with_expanded_lo
                         runs_root=tmp_path/'runs', limits=RunLimits(max_turns=2))
         async with app.run_test(size=(100, 36)) as pilot:
             app.query_one('#workspace-path', Input).value = str(workspace)
-            app.query_one('#oracle-path', Input).value = str(oracle)
             await pilot.click('#preview')
             await pilot.pause(.1)
             small_height = app.query_one('#timeline').size.height
@@ -96,7 +97,7 @@ def test_rounds_show_public_analysis_tool_arguments_and_returns_with_expanded_lo
                 await pilot.pause(.1)
                 if app.last_result:
                     break
-            assert app.last_result and app.last_result.verified
+            assert app.last_result and app.last_result.status == "candidate_unverified"
             assert app.query_one('#timeline').size.height >= small_height + 6
             assert app.query_one('#summary-panel').display
             assert not app.query_one('#fields').display

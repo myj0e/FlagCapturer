@@ -85,7 +85,7 @@ def test_lost_sandbox_ends_run_without_more_tools_or_provider_error(tmp_path: Pa
     ))])
     runtime = LostRuntime()
     evidence = EvidenceStore(tmp_path / "run")
-    tools = ToolRegistry(challenge, work, evidence, runtime, None)
+    tools = ToolRegistry(challenge, work, evidence, runtime)
     loop = AgentLoop(model, tools, evidence)
     prompt = loop._initial_prompt("synthetic task")
     assert "flush=True" in prompt and "checkpoints" in prompt
@@ -116,7 +116,7 @@ def test_recoverable_timeout_allows_model_to_continue(tmp_path: Path):
         ToolCall("command_run", {"argv": ["batch2"]}),
     ))])
     evidence = EvidenceStore(tmp_path / "run")
-    result = AgentLoop(model, ToolRegistry(challenge, work, evidence, runtime, None), evidence).run("synthetic")
+    result = AgentLoop(model, ToolRegistry(challenge, work, evidence, runtime), evidence).run("synthetic")
     assert runtime.calls == 2 and result.status == "unverified"
     events = [json.loads(line) for line in (evidence.run_dir / "events.jsonl").read_text().splitlines()]
     assert [e['result']['status'] for e in events if e['event_type'] == 'tool_result'] == ['timeout', 'ok']
@@ -157,7 +157,7 @@ def test_background_script_tool_reports_silence_and_uses_remaining_budget(tmp_pa
         def close_interactive(self, *args):
             return InteractiveReadResult(b"", "closed", 130)
     runtime = Runtime()
-    tools = ToolRegistry(challenge, work, EvidenceStore(tmp_path / "run"), runtime, None)
+    tools = ToolRegistry(challenge, work, EvidenceStore(tmp_path / "run"), runtime)
     tools.run_deadline = time.monotonic() + 150
     saved = tools.invoke(ToolCall("script_save", {"path": "solve.py", "source": "print('progress',flush=True)"}))
     assert saved.reply.success
@@ -191,7 +191,7 @@ def test_coalesced_session_read_combines_heartbeats_and_terminal_state(tmp_path)
         InteractiveReadResult(b'progress 2\n', 'running', None, elapsed_seconds=30, output_idle_seconds=0),
         InteractiveReadResult(b'done\n', 'exited', 0, elapsed_seconds=40, output_idle_seconds=1),
     ])
-    tools = ToolRegistry(challenge, work, EvidenceStore(tmp_path/'run'), runtime, None)
+    tools = ToolRegistry(challenge, work, EvidenceStore(tmp_path/'run'), runtime)
     started = tools.invoke(ToolCall('session_start', {'argv':['authored']}))
     assert started.reply.success
     sid = json.loads(started.reply.content)['session_id']

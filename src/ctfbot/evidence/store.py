@@ -60,7 +60,7 @@ class EvidenceStore:
         self._artifacts[ref["artifact"]] = ref
         return ref
 
-    def read_artifact(self, relative: str, *, maximum: int = 4 * 1024 * 1024) -> tuple[bytes, dict[str, Any]]:
+    def read_artifact(self, relative: str, *, maximum: int = 32 * 1024 * 1024) -> tuple[bytes, dict[str, Any]]:
         """Read only an artifact produced by this store, checking its identity."""
         if not isinstance(relative, str) or not re.fullmatch(r"artifacts/sha256-[0-9a-f]{64}\.bin", relative):
             raise ValueError("invalid artifact reference")
@@ -78,6 +78,17 @@ class EvidenceStore:
         if len(data) != ref["bytes"] or hashlib.sha256(data).hexdigest() != ref["sha256"]:
             raise EvidenceIntegrityError("artifact hash/length differs from this run's recorded source")
         return data, dict(ref)
+
+    def reference_status(self, relative: str) -> str:
+        """Cheap index metadata; actual reads still verify the complete hash."""
+        if relative not in self._artifacts:
+            return "not_owned_by_run"
+        target = self.run_dir / relative
+        if not target.exists():
+            return "missing"
+        if target.is_symlink() or self.artifact_dir.is_symlink():
+            return "unsafe_path"
+        return "present_hash_unchecked"
 
     def append(self, event_type: str, **fields: Any) -> dict[str, Any]:
         with self._lock:

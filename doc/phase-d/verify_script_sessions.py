@@ -30,7 +30,7 @@ def main() -> None:
         challenge.mkdir(); work.mkdir()
         with DockerRuntime(challenge, image) as runtime:
             tools = ToolRegistry(challenge, work, EvidenceStore(args.output / "run"),
-                                 runtime, None, command_timeout=1)
+                                 runtime, command_timeout=1)
             tools.run_deadline = time.monotonic() + 180
 
             def call(name, arguments):

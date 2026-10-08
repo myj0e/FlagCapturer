@@ -26,7 +26,7 @@ def registry(tmp_path, content=b'authored', filename='input.txt', maximum=16384,
     source.mkdir(); work.mkdir()
     (source/filename).write_bytes(content)
     evidence = EvidenceStore(tmp_path/'run')
-    return ToolRegistry(source, work, evidence, runtime, None, max_model_output_bytes=maximum)
+    return ToolRegistry(source, work, evidence, runtime, max_model_output_bytes=maximum)
 
 
 def call(tools, name, **args):
@@ -45,7 +45,7 @@ def test_explicit_unsolved_stops_once_independently_of_input_type(tmp_path, cont
         ScriptedTurn(text='must not continue'),
     ])
     result = AgentLoop(model, tools, tools.evidence).run('authored task')
-    assert result.status == 'unsolved' and not result.verified and result.turns == 1
+    assert result.status == 'unsolved' and result.turns == 1
     assert model._index == 1 and model.closed
     events = [json.loads(line) for line in tools.evidence.events_path.read_text().splitlines()]
     assert sum(e['event_type']=='completion_recorded' for e in events) == 1
@@ -61,7 +61,7 @@ def test_format_candidate_does_not_complete_or_verify_and_can_be_checked_later(t
         ToolCall('run_complete', {'outcome':'candidate_unverified', 'candidate_id':'candidate-1', 'summary':'Not established', 'unresolved':['no trusted check']}),
     ))])
     result = AgentLoop(model, tools, tools.evidence).run('authored task')
-    assert result.status == 'candidate_unverified' and result.candidate_ids == ('candidate-1',) and not result.verified
+    assert result.status == 'candidate_unverified' and result.candidate_ids == ('candidate-1',)
     assert result.tool_calls == 3
     assert not tools.reliability.candidates['candidate-1']['verified']
 
@@ -95,7 +95,7 @@ def test_provider_interruption_after_accepted_completion_keeps_unsolved(tmp_path
     model = InterruptedProvider([ScriptedTurn(tool_calls=(ToolCall('run_complete', {
         'outcome':'unsolved', 'summary':'Insufficient evidence', 'unresolved':[]}),))])
     result = AgentLoop(model, tools, tools.evidence).run('authored task')
-    assert result.status == 'unsolved' and not result.verified and model.closed
+    assert result.status == 'unsolved' and model.closed
 
 
 def test_completion_rejects_invented_candidate_and_trusted_outcome(tmp_path):
@@ -114,7 +114,7 @@ def test_candidate_without_completion_can_exhaust_budget(tmp_path):
     model = FakeModelSession([ScriptedTurn(tool_calls=(ToolCall('candidate_submit', {
         'candidate':'flag{guess}', 'unchecked_reason':'No checker yet'}),))])
     result = AgentLoop(model, tools, tools.evidence, limits=RunLimits(max_turns=1)).run('authored task')
-    assert result.status == 'budget_exhausted' and not result.verified
+    assert result.status == 'budget_exhausted'
     assert result.candidate_ids == ('candidate-1',)
 
 
@@ -230,14 +230,14 @@ def test_errors_distinguish_api_import_dependency_input_and_hash(tmp_path):
 
 
 def test_diagnosis_is_read_only_indexes_model_visible_evidence_and_redacts_raw_content(tmp_path):
-    workspace,_ = make_workspace(tmp_path)
+    workspace = make_workspace(tmp_path)
     service = LocalChallengeService(model_factory=lambda:FakeModelSession([
         ScriptedTurn(tool_calls=(ToolCall('challenge_list',{'path':'.'}),),text='PRIVATE_PUBLIC_MESSAGE_SENTINEL'),
         ScriptedTurn(tool_calls=(ToolCall('candidate_submit',{'candidate':'flag{PRIVATE_CANDIDATE_SENTINEL}'}),
             ToolCall('run_complete',{'outcome':'candidate_unverified','candidate_id':'candidate-1',
                                    'summary':'PRIVATE_SUMMARY_SENTINEL','unresolved':['unknown']}))),
     ]),model_metadata={'provider':'synthetic'},runtime_factory=QuietRuntime)
-    result=service.run(workspace,None,IMAGE,tmp_path/'runs',RunLimits(max_turns=3))
+    result=service.run(workspace,IMAGE,tmp_path/'runs',RunLimits(max_turns=3))
     root=Path(result.run_dir)
     before={p.relative_to(root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*') if p.is_file()}
     with patch('subprocess.Popen',side_effect=AssertionError('diagnosis executed a command')):
@@ -251,8 +251,8 @@ def test_diagnosis_is_read_only_indexes_model_visible_evidence_and_redacts_raw_c
     for sentinel in ('PRIVATE_PUBLIC_MESSAGE_SENTINEL','PRIVATE_CANDIDATE_SENTINEL','PRIVATE_SUMMARY_SENTINEL'):
         assert sentinel not in serialized and sentinel not in generate_basic_report(root).read_text()
     assert report['summary']['final']['status']=='candidate_unverified'
-    metrics=_aggregate([{'run_id':result.run_id,'status':result.status,'verified':False,'candidate_submissions':1}])
-    assert metrics['verified_over_eligible_started']==[0,1]
+    metrics=_aggregate([{'run_id':result.run_id,'status':result.status,'candidate_submissions':1}])
+    assert metrics['completed_with_candidate_over_scheduled']==[1,1]
 
 
 def test_default_run_accepts_more_than_sixty_tool_requests(tmp_path):

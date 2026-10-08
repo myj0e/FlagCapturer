@@ -26,7 +26,6 @@ from ctfbot.challenge.local_service import LocalServiceSpec
 from ctfbot.challenge.remote import RemoteSpec
 from ctfbot.packs.catalog import snapshot as pack_snapshot
 from ctfbot.evidence.store import EvidenceStore
-from ctfbot.evidence.store import require_private_regular_file
 from ctfbot.evidence.redaction import redact_sensitive_text
 from ctfbot.model_adapters.protocol import ModelSession
 from ctfbot.runtime.docker import DockerRuntime, DockerLimits
@@ -37,10 +36,9 @@ class BaselineAdmissionError(ValueError):
     pass
 
 
-def validate_baseline_snapshot(workspace_path: Path, oracle_path: Path | None, runs_root: Path) -> tuple[Path, Path | None, dict[str, Any], str]:
+def validate_baseline_snapshot(workspace_path: Path) -> tuple[Path, dict[str, Any], str]:
     """Fail closed on unadmitted data before opening a provider or runtime."""
     workspace = _private_input(workspace_path)
-    oracle = _private_input(oracle_path) if oracle_path is not None else None
     if not workspace.is_dir():
         raise BaselineAdmissionError("expected an imported workspace directory; use TUI Preview to import a single challenge file")
     required = {"TASK.md", "provenance.json", "input"}
@@ -60,8 +58,6 @@ def validate_baseline_snapshot(workspace_path: Path, oracle_path: Path | None, r
         raise BaselineAdmissionError("workspace provenance exceeds the 256 KiB limit")
     if any(stat.S_IMODE((workspace / name).stat().st_mode) & 0o222 for name in ("TASK.md", "provenance.json")):
         raise BaselineAdmissionError("TASK.md and provenance must be read-only")
-    if oracle is not None and (oracle.is_relative_to(workspace) or oracle.is_relative_to(runs_root.resolve())):
-        raise BaselineAdmissionError("oracle must be outside agent workspace and run output")
     try:
         provenance = json.loads((workspace / "provenance.json").read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -92,17 +88,13 @@ def validate_baseline_snapshot(workspace_path: Path, oracle_path: Path | None, r
     if provenance.get("authorization_scope") != "private local evaluation; do not redistribute challenge assets":
         raise BaselineAdmissionError("challenge snapshot is not marked for private local evaluation")
     try:
-        if oracle is not None:
-            require_private_regular_file(oracle)
-            if oracle.stat().st_size > 64 * 1024:
-                raise BaselineAdmissionError("private oracle exceeds the 64 KiB limit")
         if (workspace / "TASK.md").stat().st_size > 64 * 1024:
             raise BaselineAdmissionError("TASK.md exceeds the 64 KiB limit")
         task = (workspace / "TASK.md").read_text(encoding="utf-8")
     except BaselineAdmissionError:
         raise
     except (OSError, ValueError, UnicodeError) as exc:
-        raise BaselineAdmissionError(f"challenge task or private oracle failed validation: {type(exc).__name__}") from exc
+        raise BaselineAdmissionError(f"challenge task failed validation: {type(exc).__name__}") from exc
     challenge_id = provenance.get("challenge_id")
     if not isinstance(challenge_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]{0,79}", challenge_id):
         raise BaselineAdmissionError("challenge provenance has an invalid challenge ID")
@@ -158,21 +150,7 @@ def validate_baseline_snapshot(workspace_path: Path, oracle_path: Path | None, r
         actual_inputs[relative] = (len(data), hashlib.sha256(data).hexdigest())
     if actual_inputs != expected_inputs:
         raise BaselineAdmissionError("challenge input file set or hashes differ from provenance")
-    if oracle is not None:
-        try:
-            oracle_payload = json.loads(oracle.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise BaselineAdmissionError("private oracle is invalid") from exc
-        if (
-            not isinstance(oracle_payload, dict)
-            or oracle_payload.get("challenge_id") != challenge_id
-            or oracle_payload.get("source_commit") != provenance.get("source_commit")
-            or oracle_payload.get("challenge_metadata_sha256") != provenance.get("challenge_metadata_sha256")
-            or not isinstance(oracle_payload.get("flag"), str)
-            or not oracle_payload.get("flag")
-        ):
-            raise BaselineAdmissionError("private oracle provenance does not match the challenge snapshot")
-    return workspace, oracle, provenance, task
+    return workspace, provenance, task
 
 
 def _private_input(path: Path) -> Path:
@@ -184,7 +162,6 @@ def _private_input(path: Path) -> Path:
 def run_baseline(
     *,
     workspace: Path,
-    oracle_path: Path | None = None,
     runtime_image: str,
     runs_root: Path,
     model: ModelSession | None = None,
@@ -202,7 +179,7 @@ def run_baseline(
     additional_prompt: str = "",
 ) -> RunResult:
     baseline_started = time.monotonic()
-    workspace, oracle_path, provenance, task = validate_baseline_snapshot(workspace, oracle_path, runs_root)
+    workspace, provenance, task = validate_baseline_snapshot(workspace)
     if additional_prompt.strip():
         task += "\n\nUser supplemental hints (guidance, not verified facts):\n" + additional_prompt
     local_service = (LocalServiceSpec.from_manifest(provenance["local_service"])
@@ -267,7 +244,7 @@ def run_baseline(
         "platform": platform.platform(),
         "ctfbot_commit": _git_commit(Path.cwd()),
         "runtime_image": runtime_image,
-        "verification": {"method": "exact-string controller-only" if oracle_path else "model-selected candidate; correctness unverified"},
+        "verification": {"method": "model-selected candidate; correctness unverified"},
         "local_service": provenance.get("local_service"),
         "remote": provenance.get("remote"),
         "domain_packs": pack_snapshot(),
@@ -400,7 +377,6 @@ def run_baseline(
                 controller_work,
                 evidence,
                 runtime,
-                oracle_path,
                 command_timeout=limits.tool_timeout_seconds,
                 max_model_output_bytes=limits.per_tool_output_bytes,
                 service_endpoint=local_service.endpoint if local_service else None,
@@ -560,7 +536,6 @@ def run_baseline(
             stop_reason=stop_reason,
             turns=turns,
             tool_calls=tool_calls,
-            verified=bool(loop and loop.verified),
             run_dir=str(run_dir),
             usage_totals=dict(loop.usage_totals) if loop else {},
             cleanup_errors=tuple(loop.cleanup_errors) if loop else (),
@@ -614,7 +589,6 @@ def _empty_result(run_id: str, run_dir: Path, status: str, stop_reason: str,
         stop_reason=stop_reason,
         turns=turns,
         tool_calls=tool_calls,
-        verified=bool(loop and loop.verified),
         run_dir=str(run_dir),
         usage_totals=dict(loop.usage_totals) if loop else {},
         cleanup_errors=tuple(loop.cleanup_errors) if loop else (),

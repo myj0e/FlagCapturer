@@ -13,10 +13,7 @@ from ctfbot.application.baseline import BaselineAdmissionError
 from ctfbot.application.baseline_smoke import run_synthetic_smoke
 from ctfbot.application.diagnostics import collect_diagnostics, render_diagnostics
 from ctfbot.application.llm_setup import setup_llm, show_llm_status, test_llm_connection, test_llm_tool_call
-from ctfbot.application.llm_setup import read_llm_config
 from ctfbot.application.service import create_codex_application_service
-from ctfbot.benchmark.runner import load_case_set, run_batch
-from ctfbot.model_adapters.codex_session import CodexModelSession
 from ctfbot.tui.app import run_tui
 
 
@@ -70,12 +67,11 @@ def build_parser() -> argparse.ArgumentParser:
     replay = subparsers.add_parser('replay', help='explicit offline command replay in Docker, without a model or flag submission')
     replay.add_argument('--run-dir', required=True, type=Path)
     replay.add_argument('--workspace', required=True, type=Path)
-    replay.add_argument('--oracle', type=Path, help='optional known-answer oracle; not used to verify replay output')
     replay.add_argument('--output', required=True, type=Path)
     replay.add_argument('--wall-time', type=int, default=300)
     replay_recover = subparsers.add_parser('replay-recover', help='recover owned offline replay containers; retain uncertain Docker requests')
     replay_recover.add_argument('--output', required=True, type=Path)
-    evaluation = subparsers.add_parser('evaluate', help='bounded version-2 dataset evaluation through the shared service (uses model quota)')
+    evaluation = subparsers.add_parser('evaluate', help='bounded version-3 candidate workflow evaluation through the shared service (uses model quota)')
     evaluation.add_argument('--dataset', required=True, type=Path)
     evaluation.add_argument('--development-reference', type=Path)
     evaluation.add_argument('--runtime-image', required=True)
@@ -110,7 +106,6 @@ def build_parser() -> argparse.ArgumentParser:
     llm_subparsers.add_parser('tool-smoke', help='make one experimental constant-return tool-call check')
     solve = subparsers.add_parser('solve', help='run one admitted offline or reviewed service/remote challenge (uses model quota)')
     solve.add_argument('--workspace', required=True, help='importer-generated workspace directory')
-    solve.add_argument('--oracle', help='optional controller-only oracle.json for known-answer verification')
     solve.add_argument('--additional-prompt', default='', help='optional solving hints, including any known flag format; no format check is performed')
     solve.add_argument('--runtime-image', required=True, help='tool image pinned by repository digest or sha256 image ID')
     solve.add_argument('--runs-root', default='runs/phase-a', help='private output root (default: runs/phase-a)')
@@ -118,16 +113,6 @@ def build_parser() -> argparse.ArgumentParser:
     solve.add_argument('--max-tool-calls', type=int, default=None, help='Optional explicit per-run cap; default: unlimited')
     solve.add_argument('--wall-time', type=int, default=1800, help='maximum run time in seconds')
     solve.add_argument('--confirm-model-usage', action='store_true', help='confirm this command may use model quota')
-    batch = subparsers.add_parser('baseline', help='run the admitted pilot batch (uses model quota)')
-    batch.add_argument('--case-set', required=True, help='private JSON case-set with admitted workspace/oracle paths')
-    batch.add_argument('--runtime-image', required=True, help='tool image pinned by repository digest or sha256 image ID')
-    batch.add_argument('--runs-root', default='runs/phase-a', help='private output root (default: runs/phase-a)')
-    batch.add_argument('--max-total-model-turns', type=int, required=True,
-                       help='hard batch-wide model-turn cap (maximum 690)')
-    batch.add_argument('--confirm-model-usage', action='store_true', help='confirm this command may use model quota')
-    batch.add_argument('--max-turns', type=int, default=30)
-    batch.add_argument('--max-tool-calls', type=int, default=None, help='Optional explicit per-run cap; default: unlimited')
-    batch.add_argument('--wall-time', type=int, default=1800)
     subparsers.add_parser('baseline-smoke', help='run the synthetic offline agent-loop acceptance smoke')
     return parser
 
@@ -175,8 +160,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return 0 if result['disjoint'] else 1
             if args.command == 'replay':
                 from ctfbot.reporting.replay import replay_run
-                saved = replay_run(run_dir=args.run_dir, workspace=args.workspace, oracle=args.oracle,
-                                   output=args.output, wall_seconds=args.wall_time)
+                saved = replay_run(run_dir=args.run_dir, workspace=args.workspace, output=args.output, wall_seconds=args.wall_time)
                 print(saved)
                 return 0 if json.loads(saved.read_text())['status'] == 'matched' else 1
             if args.command == 'replay-recover':
@@ -298,7 +282,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print('Refusing to start: add --confirm-model-usage to explicitly authorize model quota use.')
                 return 2
             workspace = Path(args.workspace)
-            oracle_path = Path(args.oracle) if args.oracle else None
             runs_root = Path(args.runs_root)
             limits = RunLimits(
                 max_turns=args.max_turns,
@@ -311,7 +294,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                                                        evaluation_mode=args.evaluation_mode)
             result = service.run(
                 workspace=workspace,
-                oracle_path=oracle_path,
                 runtime_image=args.runtime_image,
                 runs_root=runs_root,
                 limits=limits,
@@ -323,58 +305,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f'Run {result.run_id}: {result.status} ({result.stop_reason})')
         print(f'Turns: {result.turns}; tool calls: {result.tool_calls}')
         print(f'Evidence: {result.run_dir}')
-        if result.status == 'format_only':
-            print('Candidate matches the expected format; correctness remains unverified.')
-            return 0
         if result.status == 'candidate_unverified':
             print('Attempt completed with an unverified candidate; correctness remains unverified.')
             return 0
-        return 0 if result.verified else 1
-
-    if args.command == 'baseline':
-        if args.memory_namespace or args.memory_root or args.evaluation_mode != 'blind':
-            print('Legacy Stage A baseline does not accept memory options; use evaluate for explicit D-stage conditions.')
-            return 1
-        try:
-            if not args.confirm_model_usage:
-                print('Refusing to start: add --confirm-model-usage to explicitly authorize model quota use.')
-                return 2
-            config = read_llm_config()
-            if not config:
-                parser.error('no model is configured; run `ctfbot llm setup` first')
-            cases, repeat_ids = load_case_set(Path(args.case_set))
-            limits = RunLimits(
-                max_turns=args.max_turns,
-                max_tool_calls=args.max_tool_calls,
-                wall_time_seconds=args.wall_time,
-            )
-            metadata = {
-                'provider': str(config['provider']),
-                'model': str(config['model']),
-                'reasoning_effort': config.get('reasoning_effort'),
-                'provider_api': 'Codex App Server experimental dynamicTools',
-            }
-            batch_result = run_batch(
-                cases=cases,
-                repeat_challenges=repeat_ids,
-                model_factory=lambda: CodexModelSession(
-                    str(config['model']),
-                    str(config['reasoning_effort']) if config.get('reasoning_effort') else None,
-                ),
-                model_metadata=metadata,
-                runtime_image=args.runtime_image,
-                runs_root=Path(args.runs_root),
-                limits=limits,
-                max_total_model_turns=args.max_total_model_turns,
-            )
-        except (BaselineAdmissionError, OSError, ValueError, RuntimeError) as exc:
-            print(f'Baseline batch failed before or during a run: {exc}')
-            return 1
-        print(f'Batch {batch_result.batch_id}: {batch_result.status}')
-        print(f'Runs: {batch_result.completed_runs}; verified: {batch_result.verified_runs}')
-        print(f'Remaining model turns: {batch_result.remaining_model_turns}')
-        print(f'Summary: {batch_result.summary_path}')
-        return 0 if batch_result.status == 'complete' else 1
+        return 1
 
     return run_tui(service_profile=args.service_profile, remote_profile=args.remote_profile,
                    remote_grant=args.remote_grant, memory_root=args.memory_root,

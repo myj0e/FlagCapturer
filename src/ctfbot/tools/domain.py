@@ -25,7 +25,7 @@ def _relative(value: Any) -> str:
 
 def install_domain_tools(registry) -> None:
     definitions = registry._definitions
-    saved: dict[str, dict[str, Any]] = {}
+    saved = registry.scripts
     packs = catalog()
 
     def command(argv):
@@ -118,7 +118,8 @@ def install_domain_tools(registry) -> None:
         outcome = registry._run_command({"argv": ["python3", "-c", writer, path, base64.b64encode(data).decode()]})
         if outcome.result.get("exit_code") != 0:
             return outcome
-        saved[path] = artifact
+        saved[path] = {"path": path, "source": artifact, "sha256": artifact["sha256"],
+                       "created": dict(registry.reliability.call_context), "last_execution": None}
         registry.evidence.append("script_saved", path=path, source=artifact)
         return reply({"path": path, "source": artifact})
 
@@ -136,20 +137,27 @@ def install_domain_tools(registry) -> None:
                   "assert p.resolve().is_relative_to('/work') and not p.is_symlink(); data=p.read_bytes(); "
                   "assert hashlib.sha256(data).hexdigest()==sys.argv[2]; sys.argv=[str(p),*sys.argv[3:]]; "
                   "exec(compile(data,str(p),'exec'),{'__name__':'__main__','__file__':str(p)})")
-        registry.evidence.append("script_execution", path=path, source=saved[path], argv=argv)
+        registry.evidence.append("script_execution", path=path, source=saved[path]["source"], argv=argv)
         return ["python3", "-u", "-c", loader, path, saved[path]["sha256"], *argv]
 
     def script_run(args):
-        return registry._run_command({"argv": script_argv(args)})
+        outcome = registry._run_command({"argv": script_argv(args)})
+        saved[_relative(args["path"])]["last_execution"] = {**registry.reliability.call_context, **outcome.result}
+        return outcome
 
     define("script_run", "Run previously saved script bytes after checking their SHA-256; network policy and tool budget are unchanged.", {
         "path": path_schema, "argv": {"type": "array", "items": {"type": "string", "maxLength": 512}, "maxItems": 16},
     }, script_run)
 
+    def script_start(args):
+        outcome = registry._session_start({"argv": script_argv(args)}, background=True)
+        saved[_relative(args["path"])]["last_execution"] = {**registry.reliability.call_context, **outcome.result}
+        return outcome
+
     if callable(getattr(registry.runtime, "start_script_session", None)):
         define("script_start", "Start a saved, hash-checked Python script as a background session without the 120s command limit. Returns session_id immediately. Use session_read (elapsed_seconds/output_idle_seconds) to assess progress and session_close to stop only this script. Silence alone does not kill it; the remaining run budget still applies. Print flushed progress every 5-10s and checkpoint in /work.", {
             "path": path_schema, "argv": {"type": "array", "items": {"type": "string", "maxLength": 512}, "maxItems": 16},
-        }, lambda args: registry._session_start({"argv": script_argv(args)}, background=True))
+        }, script_start)
 
     def export(args):
         path = _relative(args["path"])
@@ -158,8 +166,8 @@ def install_domain_tools(registry) -> None:
             raise ValueError("export requires 1 to 16 challenge input lineage paths")
         lineage = []
         for name in parents:
-            source = registry._checked_file(registry.challenge_root, _relative(name))
-            lineage.append({"input_path": name, "sha256": hashlib.sha256(source.read_bytes()).hexdigest()})
+            data = registry.reliability.input_bytes(_relative(name))
+            lineage.append({"input_path": name, "sha256": hashlib.sha256(data).hexdigest()})
         reader = ("import base64,json,pathlib,sys; p=pathlib.Path('/work')/sys.argv[1]; "
                   "assert p.resolve().is_relative_to('/work') and not p.is_symlink() and p.is_file(); "
                   "assert p.stat().st_size<=262144; data=p.read_bytes(); assert len(data)<=262144; "
@@ -174,6 +182,8 @@ def install_domain_tools(registry) -> None:
             raise ValueError("export exceeds 256 KiB")
         artifact = registry.evidence.write_artifact(data)
         registry.evidence.append("artifact_lineage", runtime_path=path, artifact=artifact, parents=lineage)
+        registry.checkpoints[path] = {"path": path, "artifact": artifact, "parents": lineage,
+                                      "created": dict(registry.reliability.call_context)}
         return reply({"artifact": artifact, "parents": lineage})
 
     define("artifact_export", "Export up to 256 KiB from /work into private evidence with declared challenge-input lineage; never reads controller paths.", {

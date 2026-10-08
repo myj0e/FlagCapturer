@@ -73,6 +73,15 @@ def generate_basic_report(run_dir: Path) -> Path:
         else "- Resume: `unspecified`",
         "",
     ]
+    transmission = result.get("transmission")
+    if isinstance(transmission, dict):
+        lines.extend([f"- Tool reply transmission: `{transmission.get('tool_reply_bytes', 'unknown')}` UTF-8 bytes (not context tokens)",
+                      f"- Prompt / argument / public message bytes: `{transmission.get('prompt_bytes', 'unknown')}` / `{transmission.get('argument_bytes', 'unknown')}` / `{transmission.get('public_message_bytes', 'unknown')}`"])
+        for name, pool in transmission.get('pools', {}).items():
+            lines.append(f"- Reply pool {_safe_inline(name)}: `{pool['used']}` / `{pool['limit']}` bytes")
+    lines.append("- Provider current context occupancy: `unknown; billing usage is separate`")
+    restores = sum(e.get('event_type') == 'context_restore_delivered' for e in events)
+    lines.append(f"- Context restoration injections: `{restores}`; pending: `{_safe_inline(result.get('context_restore_pending') or 'none')}`")
     if incomplete_tail:
         lines.append("- Evidence log has an incomplete trailing event; that fragment was omitted.")
     verification = metadata.get("verification")
@@ -129,8 +138,7 @@ def generate_basic_report(run_dir: Path) -> Path:
     lines.extend(["", "## Recorded timeline", ""])
     lines.extend(["- `unsolved` means this attempt did not solve the challenge; it is not proof of impossibility.",
                   "- `candidate_unverified` records a completed attempt with a candidate, not confirmed correctness.",
-                  "- Historical `format_only` terminal results retain their original meaning; contract v2 records candidates separately.",
-                  "- Local checks, model-reported support and process exit codes never become trusted oracle verification.", ""])
+                  "- Local checks, model-reported support and process exit codes never become proof of flag correctness.", ""])
     for event in events:
         event_type = event.get("event_type", "unknown")
         details = _timeline_details(event)
@@ -170,7 +178,7 @@ def _timeline_details(event: dict[str, Any]) -> str:
     if event_type == 'controller_decision':
         return f"controller `{_safe_inline(event.get('action'))}`: `{_safe_inline(event.get('reason'))}`"
     if event_type == 'candidate_recorded':
-        return f"candidate `{_safe_inline(event.get('candidate_id'))}`; `{_safe_inline(event.get('status'))}`; correctness unverified unless controller exact verification passed"
+        return f"candidate `{_safe_inline(event.get('candidate_id'))}`; `{_safe_inline(event.get('status'))}`; correctness unverified"
     if event_type == 'candidate_check_recorded':
         return f"local check `{_safe_inline(event.get('check_id'))}` for `{_safe_inline(event.get('candidate_id'))}`; passed `{event.get('passed')}`; not trusted verification"
     if event_type == "tool_call":

@@ -77,7 +77,7 @@ def verify(image: str, output: Path, recovery_acceptance: Path | None = None):
                    not_after=(now+timedelta(minutes=10)).isoformat().replace('+00:00','Z'),
                    runtime_authorized=True, authorization_basis='self-owned loopback synthetic acceptance')
         spec = RemoteSpec.from_manifest(raw)
-        workspace, oracle = import_remote_fixture(output / 'fixture', raw, authorize_model_data=True)
+        workspace = import_remote_fixture(output / 'fixture', raw, authorize_model_data=True)
         grant = output / 'controller' / 'grant.json'
         write_private(grant, dict(schema_version=1, remote=raw, pinned_ip='127.0.0.1', solver_image=image,
                                   authorization_basis='explicit local synthetic acceptance'))
@@ -140,7 +140,7 @@ def verify(image: str, output: Path, recovery_acceptance: Path | None = None):
                 assert result.exit_code == 0 and b'blocked' in result.stdout, result
                 record('shell_egress', 'blocked', stdout=result.stdout.decode())
                 (output / 'tool-work').mkdir(mode=0o700)
-                tools = ToolRegistry(workspace / 'input', output / 'tool-work', EvidenceStore(output / 'tool-evidence'), runtime, oracle)
+                tools = ToolRegistry(workspace / 'input', output / 'tool-work', EvidenceStore(output / 'tool-evidence'), runtime)
                 def tool(name, **args):
                     outcome = tools.invoke(ToolCall(name,args))
                     assert outcome.reply.success, outcome.reply.content
@@ -205,17 +205,18 @@ def verify(image: str, output: Path, recovery_acceptance: Path | None = None):
                     response=json.loads(reply.content)
                     flag=base64.b64decode(response['data_base64']).decode()
                     assert on_tool_call(ToolCall('candidate_submit',dict(candidate=flag))).success
+                    assert on_tool_call(ToolCall('run_complete',dict(outcome='candidate_unverified',candidate_id='candidate-1',summary='Synthetic response recorded',unresolved=[]))).success
                     return TurnResult(text='authored TCP solve',tool_calls=2)
             service=LocalChallengeService(model_factory=Solver,model_metadata={'provider':'authored'},remote_runtime_factory=factory)
-            result=service.run(workspace,oracle,image,output/'runs',RunLimits(max_turns=1,wall_time_seconds=30))
-            assert result.verified, result
+            result=service.run(workspace,image,output/'runs',RunLimits(max_turns=1,wall_time_seconds=30))
+            assert result.status == 'candidate_unverified', result
             run=Path(result.run_dir)
             report=generate_basic_report(run)
             assert SYNTHETIC_FLAG not in report.read_text()
-            record('solve','verified',run_dir=str(run),audit=audit_run(run))
+            record('solve','candidate_unverified',run_dir=str(run),audit=audit_run(run))
             def failure(): raise RuntimeError('authored provider startup failure')
             service=LocalChallengeService(model_factory=failure,model_metadata={'provider':'authored-failure'},remote_runtime_factory=factory)
-            failed=service.run(workspace,oracle,image,output/'failed-runs',RunLimits(max_turns=1,wall_time_seconds=30))
+            failed=service.run(workspace,image,output/'failed-runs',RunLimits(max_turns=1,wall_time_seconds=30))
             assert failed.status=='provider_error' and failed.stop_reason=='provider_initialization_error'
             assert json.loads((Path(failed.run_dir)/'run-state.json').read_text())['cleanup_status']=='complete'
             record('provider_failure','cleaned',run_dir=failed.run_dir)
@@ -239,7 +240,6 @@ def verify(image: str, output: Path, recovery_acceptance: Path | None = None):
                               limits=RunLimits(max_turns=1,wall_time_seconds=30))
                 async with app.run_test(size=(120,40)) as pilot:
                     app.query_one('#workspace-path',Input).value=str(workspace)
-                    app.query_one('#oracle-path',Input).value=str(oracle)
                     await pilot.click('#preview')
                     await pilot.pause(.1)
                     assert not app.query_one('#run').disabled,app._preview_text
@@ -247,7 +247,7 @@ def verify(image: str, output: Path, recovery_acceptance: Path | None = None):
                     for _ in range(150):
                         await pilot.pause(.1)
                         if app.last_result is not None: break
-                    assert app.last_result and app.last_result.verified,app.status_text
+                    assert app.last_result and app.last_result.status == 'candidate_unverified',app.status_text
                     assert SYNTHETIC_FLAG in '\n'.join(app.displayed_events)
                     await pilot.click('#report')
                     await pilot.pause(.1)
@@ -257,7 +257,7 @@ def verify(image: str, output: Path, recovery_acceptance: Path | None = None):
                 selected_service=LocalChallengeService(model_factory=Solver,model_metadata={'provider':'authored'},remote_runtime_factory=selected_factory)
                 from ctfbot.cli.main import main
                 with patch('ctfbot.cli.main.create_codex_application_service',return_value=selected_service):
-                    assert main(['solve','--workspace',str(workspace),'--oracle',str(oracle),
+                    assert main(['solve','--workspace',str(workspace),
                                  '--runtime-image',image,'--runs-root',str(output/(label+'-cli')),
                                  '--max-turns','1','--wall-time','30','--confirm-model-usage'])==0
                 return asyncio.run(tui_run(selected_service,output/(label+'-tui')))

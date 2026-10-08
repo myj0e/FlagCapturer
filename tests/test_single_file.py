@@ -22,7 +22,7 @@ def test_single_executable_snapshot(tmp_path, authorized):
     source.write_bytes(payload)
     original_mode = source.stat().st_mode
     snapshot = import_single_file(source, tmp_path / "imports", authorize_model_data=authorized)
-    validate_baseline_snapshot(snapshot, None, tmp_path / "runs")
+    validate_baseline_snapshot(snapshot)
     copied = snapshot / "input" / source.name
     assert copied.read_bytes() == source.read_bytes() == payload
     assert source.stat().st_mode == original_mode
@@ -93,7 +93,7 @@ def test_tui_single_file_authorization_preview_and_run(tmp_path, folder_input):
                 if app.last_result:
                     break
             assert app.last_result and app.last_result.status == "candidate_unverified"
-            assert not app.last_result.verified
+
             assert "flag{a}" in "\n".join(app.displayed_events)
             assert source.read_bytes() == b"\x7fELFauthored synthetic file"
     asyncio.run(scenario())
@@ -111,7 +111,7 @@ def test_plain_folder_requires_exactly_one_file(tmp_path):
 
 
 def test_checkbox_does_not_authorize_existing_workspace(tmp_path):
-    workspace, _ = make_workspace(tmp_path, authorized=False)
+    workspace = make_workspace(tmp_path, authorized=False)
     async def scenario():
         app = CTFBotApp(service=service([]), runtime_image=IMAGE,
             runs_root=tmp_path / "runs", imports_root=tmp_path / "imports")

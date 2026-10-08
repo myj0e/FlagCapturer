@@ -73,7 +73,7 @@ def test_summary_public_text_controls_and_staleness():
 
 
 def test_dashboard_live_replay_toggle_resize_and_invalid_artifact(tmp_path: Path):
-    workspace, oracle = make_workspace(tmp_path)
+    workspace = make_workspace(tmp_path)
     second = snapshot('检查另一种编码')
     second['facts'] = []
     second['hypotheses'] = ['可能是编码而非加密']
@@ -88,7 +88,7 @@ def test_dashboard_live_replay_toggle_resize_and_invalid_artifact(tmp_path: Path
         app = CTFBotApp(service=make_service(lambda: model), runtime_image=IMAGE,
                        runs_root=tmp_path/'runs', limits=RunLimits(max_turns=3))
         async with app.run_test(size=(160, 50)) as pilot:
-            fill_fields(app, workspace, oracle, tmp_path/'runs')
+            fill_fields(app, workspace, tmp_path/'runs')
             await pilot.click('#preview')
             await pilot.pause()
             await pilot.click('#run')

@@ -62,6 +62,7 @@ class ReliabilityTools:
         self.budget_feedback: dict[str, Any] = {}
         self.source_refs: dict[str, dict[str, Any]] = {}
         self.summary: dict[str, Any] | None = None
+        self.summaries: dict[str, dict[str, Any]] = {}
         self._summary_progress: tuple[int, int, int] | None = None
         self._progress_revision = 0
         self._install()
@@ -73,7 +74,20 @@ class ReliabilityTools:
         }), handler)
 
     def reply(self, payload, success=True):
-        return ToolOutcome(ToolReply(json.dumps(payload, ensure_ascii=True), success), payload)
+        return ToolOutcome(ToolReply(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), success), payload)
+
+    def present_recovery(self, outcome):
+        """Audit a retrieval without creating observations or changing its cursor."""
+        from ctfbot.tools.presentation import render
+        try:
+            payload = json.loads(outcome.reply.content)
+        except ValueError:
+            payload = {"message": outcome.reply.content}
+        payload = {**outcome.result, **payload}
+        raw = self.registry.evidence.write_artifact(json.dumps(payload, ensure_ascii=False).encode(), media_type="application/json")
+        rendered = render(payload, 8192, artifact=raw)
+        return ToolOutcome(ToolReply(rendered, outcome.reply.success),
+                           {**outcome.result, "raw_response_evidence": raw, "presentation_source_evidence": raw})
 
     def selected(self, values, records):
         if not isinstance(values, list) or len(values) > 32 or any(not isinstance(v, str) or v not in records for v in values):
@@ -81,8 +95,11 @@ class ReliabilityTools:
         return values
 
     def _install(self):
-        original = self.registry._submit_candidate
-
+        from ctfbot.agent.context import SECTIONS
+        self.define("state_read", "Read controller-owned current-run state in bounded pages. Summaries are model-reported, sessions are historical/as-of observations; enumeration never consumes output. Cursor expires on state revision changes. Use summary id=latest or its revision. Missing IDs are errors; omitted data is not absent.", {
+            "section": string(enum=list(SECTIONS)), "id": string(512), "cursor": string(2048),
+            "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+        }, ["section"], lambda args: self.reply(self.registry.context_state.read(args)))
         def submit(args):
             sources = self.selected(args.get("observation_ids", []), self.observations)
             checks = self.selected(args.get("check_ids", []), self.checks)
@@ -90,24 +107,23 @@ class ReliabilityTools:
             digest = hashlib.sha256(args["candidate"].encode()).hexdigest()
             if any(self.checks[c]["candidate_sha256"] != digest for c in checks):
                 raise ValueError("check belongs to different candidate bytes")
-            outcome = original({"candidate": args["candidate"]})
             cid = f"candidate-{len(self.candidates)+1}"
-            record = {**outcome.result, "contract_version": CONTRACT_VERSION,
+            record = {**self.registry.record_candidate(args["candidate"]), "contract_version": CONTRACT_VERSION,
                       "candidate_id": cid, "candidate_sha256": digest,
                       "observation_ids": sources, "check_ids": checks,
                       "derivation": args.get("derivation", ""),
                       "unchecked_reason": args.get("unchecked_reason", "No provenance/check supplied."),
-                      "verified": outcome.result.get("status") == "verified"}
+                      "verified": False}
             self.candidates[cid] = record
             details = self.registry.evidence.write_artifact(json.dumps(record).encode(), media_type="application/json")
             self.registry.evidence.append("candidate_recorded", candidate_id=cid, status=record["status"],
                                           verified=record["verified"], details=details)
             payload = {key: value for key, value in record.items()
                        if key not in {"candidate_evidence", "derivation"}}
-            payload["ends_run"] = record["verified"]
-            return ToolOutcome(ToolReply(json.dumps(payload)), {**record, "ends_run": record["verified"]})
+            payload["ends_run"] = False
+            return ToolOutcome(ToolReply(json.dumps(payload)), {**record, "ends_run": False})
 
-        self.define("candidate_submit", "Record a candidate and its provenance; any model-selected flag is accepted without a format check; submission does NOT prove correctness or end the run. Supply observations, derivation and checks, or unchecked_reason. Only controller exact verification may end immediately. Use run_complete to explicitly finish with an unverified candidate.", {
+        self.define("candidate_submit", "Record a candidate and its provenance; any model-selected flag is accepted without a format check; submission does NOT prove correctness or end the run. Supply observations, derivation and checks, or unchecked_reason. Use run_complete to explicitly finish with an unverified candidate.", {
             "candidate": string(4096), "observation_ids": refs(), "check_ids": refs(),
             "derivation": string(), "unchecked_reason": string(),
         }, ["candidate"], submit)
@@ -122,6 +138,15 @@ class ReliabilityTools:
             "length": {"type": "integer", "minimum": 1, "maximum": 4096},
             "encoding": string(enum=["utf8", "hex"]),
         }, ["artifact", "offset", "length", "encoding"], self.read_artifact)
+        self.define("artifact_tail", "Read the final bounded bytes of this run's hash-verified artifact. UTF-8 boundary replacement or exact hex; does not execute commands.", {
+            "artifact": string(100), "length": {"type": "integer", "minimum": 1, "maximum": 4096},
+            "encoding": string(enum=["utf8", "hex"]),
+        }, ["artifact", "length", "encoding"], self.tail_artifact)
+        self.define("artifact_find", "Locate literal UTF-8 bytes in a hash-verified run artifact. Scan at most 1 MiB from offset, return at most 20 byte positions, total matches within scan, and explicit partial-scan coverage. No regex.", {
+            "artifact": string(100), "literal": string(256, minLength=1),
+            "offset": {"type": "integer", "minimum": 0},
+            "scan_bytes": {"type": "integer", "minimum": 1, "maximum": 1048576},
+        }, ["artifact", "literal", "offset", "scan_bytes"], self.find_artifact)
         self.define("challenge_read_bytes", "Read a bounded byte range of an authorized input. Offsets/lengths are file BYTES, never virtual addresses. Returns full-input hash, coverage and exact hex; use domain tools for semantic locators.", {
             "path": string(512), "offset": {"type": "integer", "minimum": 0},
             "length": {"type": "integer", "minimum": 1, "maximum": 4096},
@@ -156,7 +181,11 @@ class ReliabilityTools:
 
     def update_summary(self, args):
         turn = self.call_context.get("turn", 0)
-        progress = (turn, self.call_context.get("public_message_count", 0), self._progress_revision)
+        # The loop supplies a run-wide public-message revision. A new turn or
+        # recovery reads alone do not constitute meaningful solving progress.
+        public_revision = self.call_context.get("public_message_revision")
+        progress = ((0, public_revision, self._progress_revision) if public_revision is not None else
+                    (turn, self.call_context.get("public_message_count", 0), self._progress_revision))
         if self._summary_progress == progress:
             return self.reply({"status": "summary_already_updated", "turn": turn,
                                "message": "No new public explanation or tool results since the last update; keep the dashboard."})
@@ -168,12 +197,14 @@ class ReliabilityTools:
             json.dumps(record, ensure_ascii=False).encode(), media_type="application/json")
         self.registry.evidence.append("summary_updated", turn=turn, revision=revision, details=details)
         self.summary = record
+        self.summaries[str(revision)] = {**record, "source": details}
         self._summary_progress = progress
         return self.reply({"status": "summary_updated", "turn": turn, "revision": revision})
 
     def observe(self, call, outcome):
         """Keep raw reply and exact provenance even when model presentation is clipped."""
-        if call.name not in {"summary_update", "claim_record", "experiment_record", "run_complete"}:
+        from ctfbot.agent.context import RECOVERY_TOOLS
+        if call.name not in RECOVERY_TOOLS | {"summary_update", "claim_record", "experiment_record", "run_complete"}:
             self._progress_revision += 1
         raw = self.registry.evidence.write_artifact(outcome.reply.content.encode(), media_type="text/plain; charset=utf-8")
         try:
@@ -181,6 +212,9 @@ class ReliabilityTools:
         except ValueError:
             payload = {"message": outcome.reply.content}
         if not isinstance(payload, dict): payload = {"content": payload}
+        for key in ("status", "error_kind", "error_evidence", "next_step"):
+            if key in outcome.result:
+                payload.setdefault(key, outcome.result[key])
         oid = f"observation-{len(self.observations)+1}"
         sources = {}
         def visit(value):
@@ -194,7 +228,7 @@ class ReliabilityTools:
         visit(outcome.result)
         visit(payload)
         sources[raw['artifact']] = raw
-        if call.name in {'challenge_read_bytes', 'artifact_read'} and outcome.reply.success:
+        if call.name in {'challenge_read_bytes', 'artifact_read', 'artifact_tail'} and outcome.reply.success:
             ref_id = f"source-{len(self.source_refs)+1}"
             if call.name == 'challenge_read_bytes':
                 source = outcome.result['evidence']
@@ -203,7 +237,7 @@ class ReliabilityTools:
                 digest = source['sha256']
             else:
                 source = outcome.result['source']
-                offset = call.arguments['offset']
+                offset = outcome.result['coverage']['offset']
                 length = outcome.result['coverage']['length']
                 digest = outcome.result['selected_sha256']
             self.source_refs[ref_id] = {"observation_id": oid, "artifact_path": source['artifact'],
@@ -223,44 +257,28 @@ class ReliabilityTools:
                   "status": outcome.result.get("status"), "raw_response": raw, "sources": list(sources.values()),
                   "coverage": coverage, "context": dict(self.context),
                   "historical": call.name in {"session_read", "remote_tcp_exchange", "http_request"}}
+        if (call.name in {"script_run", "script_start"} and isinstance(call.arguments, dict)
+                and isinstance(call.arguments.get("path"), str)
+                and ("stdout_evidence" in outcome.result or "session_id" in outcome.result)):
+            script = self.registry.scripts.get(PurePosixPath(call.arguments.get("path", "")).as_posix())
+            if script is not None and script.get("last_execution") is not None:
+                script["last_execution"]["observation_id"] = oid
+                script["last_execution"]["raw_response"] = raw
         self.observations[oid] = record
         self.registry.evidence.append("observation_recorded", **record)
         payload["observation"] = {"id": oid, "raw": raw["artifact"], "coverage": coverage,
                                   "read": "artifact_read; offsets/lengths are bytes"}
         if self.budget_feedback:
             payload['run_budget'] = self.budget_feedback
-        rendered = json.dumps(payload, ensure_ascii=True)
-        presentation_truncated = False
-        if len(rendered.encode()) > self.registry.max_model_output_bytes:
-            presentation_truncated = True
-            payload = {"status": outcome.result.get("status"), "observation_id": oid,
-                       "raw_response_artifact": raw["artifact"], "truncated": True, "preview": ""}
-            maximum = self.registry.max_model_output_bytes
-            extras = {}
-            if call.name in {'challenge_read_bytes', 'artifact_read'} and outcome.reply.success:
-                extras['source_ref'] = ref_id
-            if self.budget_feedback:
-                extras['run_budget'] = {k:v for k,v in self.budget_feedback.items() if k != 'counts'}
-            for key, value in extras.items():
-                expanded = {**payload, key:value}
-                if len(json.dumps(expanded, ensure_ascii=True).encode()) <= maximum:
-                    payload = expanded
-            for key in ('stdout_evidence','stderr_evidence'):
-                ref = outcome.result.get(key)
-                if isinstance(ref, dict):
-                    expanded = {**payload, key: ref['artifact']}
-                    if len(json.dumps(expanded, ensure_ascii=True).encode()) <= maximum:
-                        payload = expanded
-            low, high = 0, len(outcome.reply.content)
-            while low < high:
-                mid = (low+high+1)//2
-                payload["preview"] = outcome.reply.content[:mid]
-                if len(json.dumps(payload, ensure_ascii=True).encode()) <= maximum: low = mid
-                else: high = mid-1
-            payload["preview"] = outcome.reply.content[:low]
-            rendered = json.dumps(payload, ensure_ascii=True)
+            if self.budget_feedback.get('transmission', {}).get('ordinary_warning'):
+                payload['output_warning'] = 'ordinary_pool_80_percent'
+        from ctfbot.tools.presentation import render
+        full_presentation = self.registry.evidence.write_artifact(
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode(), media_type="application/json")
+        rendered = render(payload, self.registry.max_model_output_bytes, artifact=raw)
+        presentation_truncated = len(json.dumps(payload).encode()) > self.registry.max_model_output_bytes
         result = {**outcome.result, "observation_id": oid, "raw_response_evidence": raw,
-                  "presentation_truncated": presentation_truncated}
+                  "presentation_truncated": presentation_truncated, "presentation_source_evidence": full_presentation}
         return ToolOutcome(ToolReply(rendered, outcome.reply.success), result)
 
     def read_artifact(self, args):
@@ -271,6 +289,29 @@ class ReliabilityTools:
         return self.reply({"status": "ok", "data": selected.hex() if args['encoding']=='hex' else selected.decode('utf-8',errors='replace'),
                            "source": source, "coverage": coverage,
                            "selected_sha256": hashlib.sha256(selected).hexdigest()})
+
+    def tail_artifact(self, args):
+        data, _ = self.registry.evidence.read_artifact(args['artifact'])
+        return self.read_artifact({**args, "offset": max(0, len(data) - args['length'])})
+
+    def find_artifact(self, args):
+        data, source = self.registry.evidence.read_artifact(args['artifact'])
+        start = args['offset']
+        stop = min(len(data), start + args['scan_bytes'])
+        needle = args['literal'].encode('utf-8')
+        offsets, count, position = [], 0, start
+        while position <= stop - len(needle):
+            position = data.find(needle, position, stop)
+            if position < 0:
+                break
+            count += 1
+            if len(offsets) < 20:
+                offsets.append(position)
+            position += 1
+        return self.reply({"status": "ok", "offsets": offsets, "matches_in_scan": count,
+                           "matches_omitted": count - len(offsets), "source": source,
+                           "coverage": {"offset": start, "end": stop, "source_bytes": len(data),
+                                        "partial_scan": start > 0 or stop < len(data)}})
 
     def input_bytes(self, relative, maximum=32*1024*1024):
         target = self.registry._checked_file(self.registry.challenge_root, relative)
@@ -397,7 +438,7 @@ class ReliabilityTools:
                   'source_path': args['path'], 'source_sha256': source_hash, 'selector': args.get('selector',''),
                   'passed': result.get('passed') is True and outcome.result.get('exit_code') == 0,
                   'validation_level': 'local_check', 'verified': False,
-                  'limitation': 'Checks only the selected relation; never a trusted oracle.',
+                  'limitation': 'Checks only the selected relation; never proof of flag correctness.',
                   'error_kind': result.get('error_kind') or outcome.result.get('error_kind'),
                   'message': result.get('message'),
                   'execution': outcome.result}

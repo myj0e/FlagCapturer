@@ -15,7 +15,7 @@ SYNTHETIC_FLAG = "CTFBOT_SYNTHETIC{remote-tcp}"
 
 
 def import_remote_fixture(output: Path, remote: dict[str, Any], *,
-                          authorize_model_data: bool = False) -> tuple[Path, Path]:
+                          authorize_model_data: bool = False) -> Path:
     spec = RemoteSpec.from_manifest(remote)
     output.mkdir(mode=0o700)
     workspace = output / "workspace"
@@ -44,13 +44,7 @@ def import_remote_fixture(output: Path, remote: dict[str, Any], *,
         path.write_bytes(data)
         path.chmod(0o444)
     inputs.chmod(0o555)
-    oracle = output / "oracle.json"
-    oracle.write_text(json.dumps({
-        "challenge_id": provenance["challenge_id"], "source_commit": provenance["source_commit"],
-        "challenge_metadata_sha256": metadata_hash, "flag": SYNTHETIC_FLAG,
-    }), encoding="utf-8")
-    oracle.chmod(0o600)
-    return workspace, oracle
+    return workspace
 
 
 def main() -> None:
@@ -59,9 +53,9 @@ def main() -> None:
     parser.add_argument("--remote-spec", type=Path, required=True, help="version-1 requested scope JSON; not a network grant")
     parser.add_argument("--authorize-model-data", action="store_true")
     args = parser.parse_args()
-    workspace, oracle = import_remote_fixture(args.output, json.loads(args.remote_spec.read_text()),
+    workspace = import_remote_fixture(args.output, json.loads(args.remote_spec.read_text()),
                                               authorize_model_data=args.authorize_model_data)
-    print(f"Workspace: {workspace}\nController-only oracle: {oracle}")
+    print(f"Workspace: {workspace}")
 
 
 if __name__ == "__main__":

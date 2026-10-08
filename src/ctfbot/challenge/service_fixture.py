@@ -13,7 +13,7 @@ from ctfbot.challenge.local_service import LocalServiceSpec
 SYNTHETIC_FLAG = "CTFBOT_SYNTHETIC{local-service}"
 
 
-def import_service_fixture(output: Path, image: str, *, authorize_model_data: bool = False) -> tuple[Path, Path]:
+def import_service_fixture(output: Path, image: str, *, authorize_model_data: bool = False) -> Path:
     service = {
         "schema_version": 1, "image": image,
         "argv": ["/usr/local/bin/python3", "/opt/ctfbot-fixture/server.py"],
@@ -22,7 +22,7 @@ def import_service_fixture(output: Path, image: str, *, authorize_model_data: bo
         "authorization_basis": "ctfbot authored synthetic local fixture; reviewed local execution profile required",
     }
     LocalServiceSpec.from_manifest(service)
-    output.mkdir(mode=0o700)  # never overwrite an earlier snapshot/oracle
+    output.mkdir(mode=0o700)  # never overwrite an earlier snapshot
     workspace = output / "workspace"
     workspace.mkdir(mode=0o700)
     inputs = workspace / "input"
@@ -49,13 +49,7 @@ def import_service_fixture(output: Path, image: str, *, authorize_model_data: bo
         path.write_bytes(data)
         path.chmod(0o444)
     inputs.chmod(0o555)
-    oracle = output / "oracle.json"
-    oracle.write_text(json.dumps({
-        "challenge_id": provenance["challenge_id"], "source_commit": provenance["source_commit"],
-        "challenge_metadata_sha256": metadata_hash, "flag": SYNTHETIC_FLAG,
-    }), encoding="utf-8")
-    oracle.chmod(0o600)
-    return workspace, oracle
+    return workspace
 
 
 def main() -> None:
@@ -64,8 +58,8 @@ def main() -> None:
     parser.add_argument("--image", required=True, help="immutable locally available synthetic service image")
     parser.add_argument("--authorize-model-data", action="store_true")
     args = parser.parse_args()
-    workspace, oracle = import_service_fixture(args.output, args.image, authorize_model_data=args.authorize_model_data)
-    print(f"Workspace: {workspace}\nController-only oracle: {oracle}")
+    workspace = import_service_fixture(args.output, args.image, authorize_model_data=args.authorize_model_data)
+    print(f"Workspace: {workspace}")
 
 
 if __name__ == "__main__":

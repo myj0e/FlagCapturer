@@ -108,15 +108,15 @@ class WorkspacePolicyTests(unittest.TestCase):
             work.mkdir()
             private.mkdir()
             (challenge / "input.txt").write_text("safe", encoding="utf-8")
-            (private / "oracle.json").write_text('{"flag":"hidden"}', encoding="utf-8")
+            (private / "private_data.json").write_text('{"flag":"hidden"}', encoding="utf-8")
             os.chmod(private, 0o700)
-            os.chmod(private / "oracle.json", 0o600)
-            (challenge / "oracle-link").symlink_to(private / "oracle.json")
+            os.chmod(private / "private_data.json", 0o600)
+            (challenge / "private_data-link").symlink_to(private / "private_data.json")
             evidence = EvidenceStore(root / "run")
-            registry = ToolRegistry(challenge, work, evidence, runtime=None, oracle_path=private / "oracle.json")
+            registry = ToolRegistry(challenge, work, evidence, runtime=None)
 
-            traversal = registry.invoke(ToolCall("challenge_read_text", {"path": "../private/oracle.json"}))
-            symlink = registry.invoke(ToolCall("challenge_read_text", {"path": "oracle-link"}))
+            traversal = registry.invoke(ToolCall("challenge_read_text", {"path": "../private/private_data.json"}))
+            symlink = registry.invoke(ToolCall("challenge_read_text", {"path": "private_data-link"}))
             self.assertEqual(traversal.result["status"], "policy_denied")
             self.assertEqual(symlink.result["status"], "policy_denied")
             self.assertNotIn("hidden", traversal.reply.content + symlink.reply.content)
@@ -136,7 +136,7 @@ class WorkspacePolicyTests(unittest.TestCase):
                     return CommandResult(0, ("value\"\\\n" * 2000).encode(), b"stderr")
 
             registry = ToolRegistry(
-                challenge, work, evidence, LargeOutputRuntime(), None,
+                challenge, work, evidence, LargeOutputRuntime(),
                 max_model_output_bytes=512,
             )
             outcome = registry.invoke(ToolCall("command_run", {"argv": ["print"]}))
@@ -232,14 +232,14 @@ class BaselineInputExposureTests(unittest.TestCase):
             os.chmod(workspace / "provenance.json", 0o444)
             private = root / "private"
             private.mkdir(mode=0o700)
-            oracle = private / "oracle.json"
-            oracle.write_text(json.dumps({
+            private_data = private / "private_data.json"
+            private_data.write_text(json.dumps({
                 "challenge_id": challenge_id,
                 "source_commit": "synthetic-commit",
                 "challenge_metadata_sha256": metadata_hash,
-                "flag": "CTFBOT_SYNTHETIC{verified}",
+                "flag": "CTFBOT_SYNTHETIC{candidate}",
             }), encoding="utf-8")
-            os.chmod(oracle, 0o600)
+            os.chmod(private_data, 0o600)
 
             class CapturingRuntime:
                 instances: list[CapturingRuntime] = []
@@ -281,24 +281,24 @@ class BaselineInputExposureTests(unittest.TestCase):
                 ToolCall("challenge_read_text", {"path": "../TASK.md"}),
                 ToolCall("command_run", {"argv": ["cat", "/challenge/provenance.json"]}),
                 ToolCall("command_run", {"argv": ["cat", "/challenge/TASK.md"]}),
-                ToolCall("command_run", {"argv": ["cat", "/challenge/private/oracle.json"]}),
+                ToolCall("command_run", {"argv": ["cat", "/challenge/private/private_data.json"]}),
                 ToolCall("command_run", {"argv": ["cat", "/challenge/../TASK.md"]}),
-                ToolCall("command_run", {"argv": ["cat", "/challenge/../../private/oracle.json"]}),
-                ToolCall("candidate_submit", {"candidate": "CTFBOT_SYNTHETIC{verified}"}),
+                ToolCall("command_run", {"argv": ["cat", "/challenge/../../private/private_data.json"]}),
+                ToolCall("candidate_submit", {"candidate": "CTFBOT_SYNTHETIC{candidate}"}),
+                ToolCall("run_complete", {"outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Retain candidate", "unresolved": []}),
             )),))
             image = "sha256:" + "a" * 64
             with patch("ctfbot.application.baseline.DockerRuntime", CapturingRuntime):
                 result = run_baseline(
                     workspace=workspace,
-                    oracle_path=oracle,
                     runtime_image=image,
                     runs_root=root / "runs",
                     model=model,
                     model_metadata={"provider": "fake"},
-                    limits=RunLimits(max_turns=1, max_tool_calls=10),
+                    limits=RunLimits(max_turns=1, max_tool_calls=12),
                 )
 
-            self.assertTrue(result.verified)
+            self.assertEqual(result.status, "candidate_unverified")
             self.assertTrue(CapturingRuntime.instances[0].closed)
             runtime = CapturingRuntime.instances[0]
             self.assertEqual(runtime.challenge_root, input_root.resolve())
@@ -313,11 +313,11 @@ class BaselineInputExposureTests(unittest.TestCase):
             outcomes = [event for event in events if event["event_type"] == "tool_result"]
             self.assertEqual([event["name"] for event in calls], [
                 "challenge_list", "challenge_read_text", "challenge_read_text", "challenge_read_text",
-                "command_run", "command_run", "command_run", "command_run", "command_run", "candidate_submit",
+                "command_run", "command_run", "command_run", "command_run", "command_run", "candidate_submit", "run_complete",
             ])
             self.assertEqual([event["result"]["status"] for event in outcomes], [
                 "ok", "ok", "policy_denied", "policy_denied",
-                "command_failed", "command_failed", "command_failed", "command_failed", "command_failed", "verified",
+                "command_failed", "command_failed", "command_failed", "command_failed", "command_failed", "unverified", "run_complete",
             ])
             listing_ref = outcomes[0]["response_evidence"]["artifact"]
             listing = json.loads((Path(result.run_dir) / listing_ref).read_text(encoding="utf-8"))
@@ -345,14 +345,13 @@ class OfflineAcceptanceTests(unittest.TestCase):
             }), encoding="utf-8")
             private = root / "private"
             private.mkdir(mode=0o700)
-            oracle = private / "oracle.json"
-            oracle.write_text('{"flag":"synthetic"}', encoding="utf-8")
-            os.chmod(oracle, 0o600)
+            private_data = private / "private_data.json"
+            private_data.write_text('{"flag":"synthetic"}', encoding="utf-8")
+            os.chmod(private_data, 0o600)
             model = FakeModelSession(())
             with self.assertRaises(BaselineAdmissionError):
                 run_baseline(
                     workspace=workspace,
-                    oracle_path=oracle,
                     runtime_image="registry.example/tool@sha256:" + "a" * 64,
                     runs_root=root / "runs",
                     model=model,
@@ -396,19 +395,18 @@ class OfflineAcceptanceTests(unittest.TestCase):
             os.chmod(workspace / "provenance.json", 0o444)
             private = root / "private"
             private.mkdir(mode=0o700)
-            oracle = private / "oracle.json"
-            oracle.write_text(json.dumps({
+            private_data = private / "private_data.json"
+            private_data.write_text(json.dumps({
                 "challenge_id": challenge_id,
                 "source_commit": "synthetic-commit",
                 "challenge_metadata_sha256": metadata_hash,
                 "flag": "synthetic",
             }), encoding="utf-8")
-            os.chmod(oracle, 0o600)
+            os.chmod(private_data, 0o600)
             model = FakeModelSession(())
             with self.assertRaisesRegex(BaselineAdmissionError, "transmission to a model"):
                 run_baseline(
                     workspace=workspace,
-                    oracle_path=oracle,
                     runtime_image="registry.example/tool@sha256:" + "a" * 64,
                     runs_root=root / "runs",
                     model=model,
@@ -424,18 +422,13 @@ class OfflineAcceptanceTests(unittest.TestCase):
         self.assertNotIn("secret-value", safe)
         self.assertNotIn("other-secret", safe)
 
-    def test_verified_candidate_stops_later_tool_calls_in_the_same_turn(self) -> None:
+    def test_explicit_completion_stops_later_tool_calls_in_the_same_turn(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             challenge = root / "challenge"
             work = root / "work"
-            private = root / "private"
             challenge.mkdir(mode=0o700)
             work.mkdir(mode=0o700)
-            private.mkdir(mode=0o700)
-            oracle = private / "oracle.json"
-            oracle.write_text(json.dumps({"flag": "CTFBOT_SYNTHETIC{valid}"}), encoding="utf-8")
-            os.chmod(oracle, 0o600)
             evidence = EvidenceStore(root / "run")
 
             class CountingRuntime:
@@ -450,15 +443,16 @@ class OfflineAcceptanceTests(unittest.TestCase):
             runtime = CountingRuntime()
             model = FakeModelSession((ScriptedTurn(tool_calls=(
                 ToolCall("candidate_submit", {"candidate": "CTFBOT_SYNTHETIC{valid}"}),
+                    ToolCall("run_complete", {"outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Retain candidate", "unresolved": []}),
                 ToolCall("command_run", {"argv": ["touch", "should-not-run"]}),
             )),))
-            registry = ToolRegistry(challenge, work, evidence, runtime, oracle)
+            registry = ToolRegistry(challenge, work, evidence, runtime)
             result = AgentLoop(model, registry, evidence, limits=RunLimits(max_turns=2)).run("synthetic task")
-            self.assertTrue(result.verified)
+            self.assertEqual(result.status, "candidate_unverified")
             self.assertEqual(runtime.calls, [])
             events = [json.loads(line) for line in (root / "run" / "events.jsonl").read_text().splitlines()]
             statuses = [event.get("result", {}).get("status") for event in events if event["event_type"] == "tool_result"]
-            self.assertEqual(statuses, ["verified", "already_verified"])
+            self.assertEqual(statuses, ["unverified", "run_complete", "already_completed"])
 
 
 if __name__ == "__main__":

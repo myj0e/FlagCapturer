@@ -27,15 +27,15 @@ def load_dataset(path: Path) -> dict[str, Any]:
         raise ValueError("dataset manifest exceeds 256 KiB")
     value = read_private(path)
     fields = {"schema_version", "dataset_id", "version", "split", "license", "cases"}
-    if set(value) != fields or value["schema_version"] != 2 or value["split"] not in {"development", "holdout"}:
-        raise ValueError("expected a version-2 development/holdout dataset")
+    if set(value) != fields or value["schema_version"] != 3 or value["split"] not in {"development", "holdout"}:
+        raise ValueError("expected a version-3 development/holdout dataset")
     if any(not isinstance(value[key], str) or not value[key].strip() for key in ("dataset_id", "version", "license")):
         raise ValueError("dataset must record its identity, version and license")
     if not isinstance(value["cases"], list) or not 1 <= len(value["cases"]) <= 100:
         raise ValueError("dataset requires 1 to 100 cases")
     seen = set()
     for item in value["cases"]:
-        required = {"challenge_id", "workspace", "oracle", "category", "labels", "provenance_sha256", "exposure", "contamination", "mechanism"}
+        required = {"challenge_id", "workspace", "category", "labels", "provenance_sha256", "exposure", "contamination", "mechanism"}
         if not isinstance(item, dict) or set(item) != required:
             raise ValueError("dataset case fields do not match schema")
         identity = item["challenge_id"]
@@ -48,12 +48,12 @@ def load_dataset(path: Path) -> dict[str, Any]:
             raise ValueError("case requires a primary category and explicit supported labels")
         if item["exposure"] not in {"public", "adapted", "private", "authored"}:
             raise ValueError("case exposure must distinguish public/adapted/private/authored")
-        for key in ("workspace", "oracle", "contamination", "mechanism"):
+        for key in ("workspace", "contamination", "mechanism"):
             if not isinstance(item[key], str) or not item[key].strip():
                 raise ValueError(f"case requires {key}")
         if not isinstance(item["provenance_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", item["provenance_sha256"]):
             raise ValueError("case provenance hash must be pinned")
-        for key in ("workspace", "oracle"):
+        for key in ("workspace",):
             source = path.parent / item[key]
             if source.is_symlink():
                 raise ValueError("dataset paths must not be symlinks")
@@ -115,32 +115,26 @@ def _run_metrics(run_dir: Path) -> dict[str, Any]:
 
 def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
     started = [row for row in rows if row.get("run_id")]
-    verified = sum(row.get("verified") is True for row in rows)
+    completed_candidates = sum(row.get("status") == "candidate_unverified" for row in rows)
     environment = sum(row.get("environment_error") is True for row in rows)
     provider = sum(row.get("status") == "provider_error" for row in rows)
-    # A verified candidate can be followed by a cleanup/provider failure. Keep
-    # that run in this denominator while still reporting the failure separately.
-    excluded_started = sum(not row.get("verified") and
-                           (row.get("environment_error") is True or row.get("status") == "provider_error")
-                           for row in started)
     elapsed = sorted(row["elapsed_seconds"] for row in rows if isinstance(row.get("elapsed_seconds"), (int, float)))
     usage: dict[str, float] = {}
     for row in rows:
         for key, value in row.get("usage_totals", {}).items():
             if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
                 usage[key] = usage.get(key, 0) + value
-    return {"scheduled": len(rows), "started": len(started), "verified": verified,
-            "candidate_only": sum(bool(row.get("candidate_submissions")) and not row.get("verified") for row in rows),
+    return {"scheduled": len(rows), "started": len(started), "completed_with_candidate": completed_candidates,
+            "candidate_runs": sum(bool(row.get("candidate_records")) for row in rows),
             "environment_errors": environment, "provider_errors": provider,
-            "unsolved_started": sum(not row.get("verified") and not row.get("environment_error") and row.get("status") != "provider_error" for row in started),
+            "unsolved_started": sum(not row.get("candidate_records") and row.get("status") in {"unsolved", "unverified", "budget_exhausted"} for row in started),
             "cleanup_failures": sum(bool(row.get("cleanup_errors")) for row in rows),
             "not_run": sum(str(row.get("status", "")).startswith("not_run") for row in rows),
             "failed_before_start": sum(not row.get("run_id") and row.get("environment_error") is True for row in rows),
-            "verified_over_scheduled": [verified, len(rows)],
-            "verified_over_eligible_started": [verified, max(0, len(started) - excluded_started)],
+            "completed_with_candidate_over_scheduled": [completed_candidates, len(rows)],
             "latency_seconds": {"mean": sum(elapsed)/len(elapsed), "min": elapsed[0], "max": elapsed[-1],
                                 "p50": elapsed[(len(elapsed)-1)//2], "p95": elapsed[min(len(elapsed)-1, math.ceil(len(elapsed)*.95)-1)]} if elapsed else None,
-            "usage_totals": usage, "cost_per_verified": None,
+            "usage_totals": usage, "cost_per_run": None,
             "cost_status": "unknown; provider billing semantics/rates have not been accepted",
             "policy_denials": sum(row.get("policy_denials", 0) for row in rows),
             "repeated_actions": sum(row.get("repeated_actions", 0) for row in rows),
@@ -174,16 +168,15 @@ def run_evaluation(*, dataset_path: Path, service: LocalChallengeService, runtim
             raise ValueError("development and holdout share case IDs or input bytes")
     snapshots = {}
     for case in dataset["cases"]:
-        preview = service.preview(case["workspace"], case["oracle"], runtime_image, output)
+        preview = service.preview(case["workspace"], runtime_image, output)
         if not preview.start_allowed:
             raise PermissionError(f"case cannot start: {case['challenge_id']}: {preview.start_block_reason or 'model transmission unauthorized'}")
-        _, _, provenance, _ = validate_baseline_snapshot(case["workspace"], case["oracle"], output)
+        _, provenance, _ = validate_baseline_snapshot(case['workspace'])
         actual_hash = hashlib.sha256((case["workspace"] / "provenance.json").read_bytes()).hexdigest()
         if (case["challenge_id"] != provenance["challenge_id"] or actual_hash != case["provenance_sha256"]
                 or category(str(provenance.get("category", ""))) != case["category"]):
             raise ValueError("dataset case identity/category/provenance differs from admitted snapshot")
         snapshots[case["challenge_id"]] = {"provenance_sha256": actual_hash,
-                                          "oracle_sha256": hashlib.sha256(case["oracle"].read_bytes()).hexdigest(),
                                           "memory_snapshot_sha256": preview.memory_policy["snapshot_sha256"] if preview.memory_policy else None}
     private_directory(output)
     batch_dir = private_directory(output / f"evaluation-{uuid.uuid4()}")
@@ -199,7 +192,7 @@ def run_evaluation(*, dataset_path: Path, service: LocalChallengeService, runtim
                   "memory_mode": service.evaluation_mode, "memory_namespaces": list(service.memory_namespaces),
                   "automatic_retry": False}
     def persist(status):
-        write_private(summary_path, {"schema_version": 2, "status": status,
+        write_private(summary_path, {"schema_version": 3, "status": status,
                       "dataset": {key: dataset[key] for key in ("dataset_id", "version", "split", "license", "manifest_sha256")},
                       "conditions": conditions, "split_audit": split_audit, "runs": rows,
                       "aggregate": _aggregate(rows), "categories": {name: _aggregate([row for row in rows if row["category"] == name]) for name in CATEGORIES},
@@ -208,13 +201,13 @@ def run_evaluation(*, dataset_path: Path, service: LocalChallengeService, runtim
                       "generalization_claim": "none; public mechanisms/authored fixtures are engineering evidence only"})
         lines = ["# Controlled evaluation", "", f"Status: `{_safe_inline(status)}`", "",
                  f"Dataset: `{_safe_inline(dataset['dataset_id'])}` / `{_safe_inline(dataset['version'])}` / `{dataset['split']}`", "",
-                 "| Category | Scheduled | Verified | Candidate only | Unsolved | Environment errors | Provider errors | Not run |",
+                 "| Category | Scheduled | Completed with candidate | Candidate recorded | Unsolved | Environment errors | Provider errors | Not run |",
                  "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"]
         for name in CATEGORIES:
             metrics = _aggregate([row for row in rows if row["category"] == name])
             lines.append(f"| {name} | " + " | ".join(str(metrics[key]) for key in
-                         ("scheduled", "verified", "candidate_only", "unsolved_started", "environment_errors", "provider_errors", "not_run")) + " |")
-        lines.extend(["", "Counts refer to runs; repetitions are reported separately in summary.json.", "",
+                         ("scheduled", "completed_with_candidate", "candidate_runs", "unsolved_started", "environment_errors", "provider_errors", "not_run")) + " |")
+        lines.extend(["", "Counts refer to runs; candidates are unverified, not correctness or solve-rate measurements. Repetitions are reported separately in summary.json.", "",
                       "Cost: unknown; no accepted provider billing conversion. No generalization or training-exclusion claim.",
                       "Command replay and live-model category acceptance are separate from evaluation execution.", ""])
         fd = os.open(batch_dir / "summary.md", os.O_CREAT | os.O_NOFOLLOW | os.O_TRUNC | os.O_WRONLY, 0o600)
@@ -235,25 +228,24 @@ def run_evaluation(*, dataset_path: Path, service: LocalChallengeService, runtim
         remaining_tools -= allocation.max_tool_calls
         try:
             frozen = snapshots[case["challenge_id"]]
-            if (hashlib.sha256((case["workspace"] / "provenance.json").read_bytes()).hexdigest() != frozen["provenance_sha256"]
-                    or hashlib.sha256(case["oracle"].read_bytes()).hexdigest() != frozen["oracle_sha256"]):
-                raise ValueError("case/oracle changed after evaluation preflight")
-            current = service.preview(case["workspace"], case["oracle"], runtime_image, batch_dir / "runs", allocation)
+            if (hashlib.sha256((case["workspace"] / "provenance.json").read_bytes()).hexdigest() != frozen["provenance_sha256"]):
+                raise ValueError("case changed after evaluation preflight")
+            current = service.preview(case["workspace"], runtime_image, batch_dir / "runs", allocation)
             if not current.start_allowed or not current.memory_policy or current.memory_policy["snapshot_sha256"] != frozen["memory_snapshot_sha256"]:
                 raise ValueError("execution policy or approved memory changed after evaluation preflight")
-            result = service.run(case["workspace"], case["oracle"], runtime_image, batch_dir / "runs", allocation, control=control)
+            result = service.run(case["workspace"], runtime_image, batch_dir / "runs", allocation, control=control)
             if result.status == "user_cancelled":
                 control.cancel()
             remaining_turns += max(0, allocation.max_turns - result.turns)
             remaining_tools += max(0, allocation.max_tool_calls - result.tool_calls)
             row.update(run_id=result.run_id, run_dir=result.run_dir, status=result.status, stop_reason=result.stop_reason,
-                       turns=result.turns, tool_calls=result.tool_calls, verified=result.verified,
+                       turns=result.turns, tool_calls=result.tool_calls,
                        usage_totals=result.usage_totals, cleanup_errors=list(result.cleanup_errors))
             row.update(_run_metrics(Path(result.run_dir)))
             run_metadata = read_private(Path(result.run_dir) / "run.json")
             row["conditions"] = {key: run_metadata.get(key) for key in ("provider", "domain_packs", "memory", "source_tree_sha256", "provenance_sha256")}
             if run_metadata.get("memory", {}).get("snapshot_sha256") != frozen["memory_snapshot_sha256"]:
-                row.update(status="conditions_changed", verified=False, environment_error=True)
+                row.update(status="conditions_changed", environment_error=True)
                 halt_reason = "conditions_changed"
             if row.get("cleanup_status") not in {"complete", "recovered"} or row.get("cleanup_errors"):
                 row["cleanup_errors"] = [*row.get("cleanup_errors", []), f"cleanup_status:{row.get('cleanup_status', 'unknown')}"]
@@ -263,7 +255,7 @@ def run_evaluation(*, dataset_path: Path, service: LocalChallengeService, runtim
             row.update(status="not_run_cancelled", error_type="KeyboardInterrupt")
         except Exception as exc:
             # Reserve the full allocation if the controller cannot determine usage.
-            row.update(status="environment_or_controller_error", environment_error=True, verified=False, error_type=type(exc).__name__)
+            row.update(status="environment_or_controller_error", environment_error=True, error_type=type(exc).__name__)
         rows.append(row)
         persist("running")
     persist("complete" if all(not row["status"].startswith("not_run") for row in rows) else "incomplete")

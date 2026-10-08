@@ -1,7 +1,7 @@
 """Explicit local Docker acceptance using authored data and a deterministic provider.
 
 Run with .venv/bin/python doc/phase-d/verify_workflows.py --image sha256:... --output /tmp/unique-dir
-No real model, downloaded challenge or oracle access in the provider.
+No real model, downloaded challenge or known answers in the provider.
 """
 from __future__ import annotations
 
@@ -83,9 +83,8 @@ class AuthoredProvider:
         if not candidate:
             raise RuntimeError("authored solver produced no candidate")
         recorded = call("candidate_submit", candidate=candidate.group())
-        if recorded.get('status') != 'verified':
-            call('run_complete', outcome='candidate_unverified', candidate_id=recorded['candidate_id'],
-                 summary='Authored solver produced an unverified candidate', unresolved=['No trusted oracle supplied'])
+        call('run_complete', outcome='candidate_unverified', candidate_id=recorded['candidate_id'],
+             summary='Authored solver produced an unverified candidate', unresolved=['competition confirmation'])
         return TurnResult(text="authored deterministic workflow", tool_calls=count)
 
 
@@ -113,18 +112,17 @@ def verify(image: str, output: Path):
         service = LocalChallengeService(model_factory=lambda c=case["category"]: AuthoredProvider(c),
                                         model_metadata={"provider": "authored-deterministic"}, runtime_factory=factory,
                                         memory_root=memory,memory_namespaces=('manuals',))
-        result = service.run(case["workspace"], case["oracle"], image, output / "runs", limits)
-        if not result.verified:
-            raise RuntimeError(f"{case['category']} not verified: {result}")
+        result = service.run(case["workspace"], image, output / "runs", limits)
+        if result.status != "candidate_unverified":
+            raise RuntimeError(f"{case['category']} did not complete with a candidate: {result}")
         run = Path(result.run_dir)
         report = generate_basic_report(run)
         assert "CTFBOT_SYNTHETIC{" not in report.read_text()
         audit = audit_run(run)
-        replay = replay_run(run_dir=run, workspace=case["workspace"], oracle=case["oracle"],
-                            output=output / "replays", runtime_factory=factory)
+        replay = replay_run(run_dir=run, workspace=case["workspace"], output=output / "replays", runtime_factory=factory)
         replay_status = json.loads(replay.read_text())["status"]
         assert replay_status == "matched", replay.read_text()
-        records.append({"category": case["category"], "verified": True, "run_dir": str(run),
+        records.append({"category": case["category"], "status": "candidate_unverified", "run_dir": str(run),
                         "audit": audit, "replay": str(replay), "replay_status": replay_status})
     queue = iter(case["category"] for case in load_dataset(holdout)["cases"])
     service = LocalChallengeService(model_factory=lambda: AuthoredProvider(next(queue)),
@@ -133,7 +131,7 @@ def verify(image: str, output: Path):
     summary = run_evaluation(dataset_path=holdout, development_reference=development, service=service,
                              runtime_image=image, output=output / "evaluation", limits=limits,
                              max_total_turns=6, max_total_tool_calls=96, max_total_wall_seconds=600)
-    assert json.loads(summary.read_text())["aggregate"]["verified_over_scheduled"] == [6, 6]
+    assert json.loads(summary.read_text())["aggregate"]["completed_with_candidate_over_scheduled"] == [6, 6]
     assert not unfinished(output / "runtime-state")
     frozen=MemoryView(memory,namespaces=('manuals',))
     revoke(memory,version,basis='synthetic acceptance revocation after completed runs')
@@ -151,7 +149,7 @@ def verify(image: str, output: Path):
                            "limitations": ["one authored mechanism per category", "byte separation only",
                                            "offline Web response; C4 acceptance separate",
                                            "command replay only; no interactive session replay"]})
-    print(json.dumps({"acceptance": str(receipt), "verified": len(records), "holdout_verified": 6}))
+    print(json.dumps({"acceptance": str(receipt), "completed_with_candidate": len(records), "holdout_completed_with_candidate": 6}))
 
 
 if __name__ == "__main__":

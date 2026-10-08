@@ -20,7 +20,6 @@ from typing import Any, Protocol
 from ctfbot.evidence.store import EvidenceStore, EvidenceIntegrityError
 from ctfbot.model_adapters.protocol import ToolCall, ToolReply, ToolSpec
 from ctfbot.runtime.sessions import InteractiveReadResult
-from ctfbot.verification.exact import verify_exact
 
 
 class CommandRuntime(Protocol):
@@ -58,8 +57,7 @@ def _schema_string(description: str) -> dict[str, Any]:
 
 
 class ToolRegistry:
-    def __init__(self, challenge_root: Path, work_root: Path, evidence: EvidenceStore, runtime: CommandRuntime | None,
-                 oracle_path: Path | None, *, command_timeout: float = 120,
+    def __init__(self, challenge_root: Path, work_root: Path, evidence: EvidenceStore, runtime: CommandRuntime | None, *, command_timeout: float = 120,
                  max_file_read_bytes: int = 64 * 1024, max_model_output_bytes: int = 16 * 1024,
                  service_endpoint: str | None = None, memory_view: Any | None = None) -> None:
         self.challenge_root = challenge_root.resolve(strict=True)
@@ -71,9 +69,6 @@ class ToolRegistry:
         self.evidence = evidence
         self.memory_view = memory_view
         self.runtime = runtime
-        self.oracle_path = oracle_path.resolve(strict=True) if oracle_path else None
-        if self.oracle_path and (self.oracle_path.is_relative_to(self.challenge_root) or self.oracle_path.is_relative_to(self.work_root)):
-            raise ValueError("oracle must remain outside the challenge and work roots")
         self.command_timeout = command_timeout
         self.max_file_read_bytes = max_file_read_bytes
         if max_model_output_bytes < 256:
@@ -90,6 +85,10 @@ class ToolRegistry:
         if remote_spec is not None:
             self.network_description = (f"The command container has no network. Only remote_tcp_exchange can reach "
                                         f"{remote_spec.endpoint}, within the controller authorization time window.")
+        self.provider_context = {"usage": None, "capacity": None, "source": "unknown"}
+        self.scripts: dict[str, dict[str, Any]] = {}
+        self.checkpoints: dict[str, dict[str, Any]] = {}
+        self.session_records: dict[str, tuple[dict[str, Any], _SessionTranscript]] = {}
         self._session_transcripts: dict[str, _SessionTranscript] = {}
         self._session_lock = threading.RLock()
         self._definitions: dict[str, tuple[ToolSpec, Handler]] = {
@@ -110,11 +109,6 @@ class ToolRegistry:
                         "minItems": 1, "maxItems": 64,
                     }}, "required": ["argv"], "additionalProperties": False,
                 }), self._run_command),
-            "candidate_submit": (
-                ToolSpec("candidate_submit", "Submit a flag candidate. An optional known-answer oracle can verify correctness; without it, any model-selected candidate is recorded as unverified with no format check. Oracle contents are never returned.", {
-                    "type": "object", "properties": {"candidate": {"type": "string", "maxLength": 4096}},
-                    "required": ["candidate"], "additionalProperties": False,
-                }), self._submit_candidate),
         }
         if runtime is not None and all(callable(getattr(runtime, name, None)) for name in (
             "start_interactive", "send_interactive", "read_interactive", "close_interactive",
@@ -134,6 +128,8 @@ class ToolRegistry:
         install_domain_tools(self)
         from ctfbot.tools.reliability import ReliabilityTools
         self.reliability = ReliabilityTools(self)
+        from ctfbot.agent.context import RunContextState
+        self.context_state = RunContextState(self)
 
     def _remote_exchange(self, arguments: Mapping[str, Any]) -> ToolOutcome:
         host, port, protocol = arguments["host"], arguments["port"], arguments["protocol"]
@@ -171,7 +167,11 @@ class ToolRegistry:
 
     def invoke(self, call: ToolCall) -> ToolOutcome:
         outcome = self._invoke(call)
-        return self.reliability.observe(call, outcome)
+        if call.name == "state_read":
+            return self.reliability.present_recovery(outcome)
+        observed = self.reliability.observe(call, outcome)
+        self.context_state.changed()
+        return observed
 
     def _invoke(self, call: ToolCall) -> ToolOutcome:
         definition = self._definitions.get(call.name)
@@ -299,32 +299,6 @@ class ToolRegistry:
             "stderr_evidence": stderr_artifact,
         }
         content = json.dumps(payload, ensure_ascii=False)
-        if len(content.encode("utf-8")) > self.max_model_output_bytes:
-            payload = {
-                "exit_code": result.exit_code,
-                "execution_state": "timed_out" if result.timed_out else "completed" if result.exit_code == 0 else "failed",
-                "timed_out": result.timed_out,
-                "truncated": True,
-                "output_preview": "",
-                "stdout_evidence": stdout_artifact["artifact"],
-                "stderr_evidence": stderr_artifact["artifact"],
-            }
-            preview = stdout + ("\n[stderr]\n" + stderr if stderr else "")
-            rendered = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-            low, high = 0, len(preview)
-            while low < high:
-                middle = (low + high + 1) // 2
-                payload["output_preview"] = preview[:middle]
-                candidate = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-                if len(candidate.encode("utf-8")) <= self.max_model_output_bytes:
-                    rendered = candidate
-                    low = middle
-                else:
-                    high = middle - 1
-            payload["output_preview"] = preview[:low]
-            content = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-            if len(content.encode("utf-8")) > self.max_model_output_bytes:
-                raise ValueError("configured tool output limit cannot hold the evidence summary")
         return ToolOutcome(ToolReply(content, result.exit_code == 0 and not result.timed_out), {
             "status": "timeout" if result.timed_out else "ok" if result.exit_code == 0 else "command_failed",
             "execution_state": payload['execution_state'],
@@ -383,6 +357,9 @@ class ToolRegistry:
         transcript = _SessionTranscript(self.evidence, session_id)
         with self._session_lock:
             self._session_transcripts[session_id] = transcript
+            self.session_records[session_id] = ({"session_id": session_id,
+                "type": "script" if background else "interactive", "argv": [arg[:160] for arg in argv[:8]],
+                "created": dict(self.reliability.call_context)}, transcript)
         transcript.record_state("starting")
         try:
             start = runtime.start_script_session if background else runtime.start_interactive  # type: ignore[attr-defined]
@@ -464,6 +441,7 @@ class ToolRegistry:
             chunks.append(result.data)
             size += len(result.data)
         result = replace(result, data=b''.join(chunks))
+        transcript.observe_state(result.status)
         payload = {
             "session_id": session_id,
             "status": result.status,
@@ -525,28 +503,20 @@ class ToolRegistry:
             raise PermissionError("session ID is not owned by this run or has already been closed")
         return transcript
 
-    def _submit_candidate(self, arguments: Mapping[str, Any]) -> ToolOutcome:
-        candidate = arguments["candidate"]
+    def record_candidate(self, candidate: str) -> dict[str, Any]:
         if not isinstance(candidate, str):
             raise ValueError("candidate must be a string")
         raw = candidate.encode("utf-8")
         if len(raw) > 4096:
             raise ValueError("candidate exceeds the 4096-byte limit")
         candidate_artifact = self.evidence.write_artifact(raw, media_type="text/plain; charset=utf-8")
-        if self.oracle_path is None:
-            return ToolOutcome(ToolReply(json.dumps({"status": "unverified", "verification_method": "none"})), {
-                "status": "unverified",
-                "verification_method": "none",
-                "candidate_evidence": candidate_artifact,
-            })
-        accepted = verify_exact(self.oracle_path, candidate)
-        status = "verified" if accepted else "rejected"
         result = {
-            "status": status,
+            "status": "unverified",
+            "verification_method": "none",
             "candidate_sha256": hashlib.sha256(raw).hexdigest(),
-            "verification_method": "exact-string controller-only",
+            "candidate_evidence": candidate_artifact,
         }
-        return ToolOutcome(ToolReply(json.dumps(result)), {**result, "candidate_evidence": candidate_artifact})
+        return result
 
 
 class _SessionTranscript:
@@ -569,6 +539,15 @@ class _SessionTranscript:
         self._sequence = 0
         self._closed = False
         self._latest_output: dict[str, Any] | None = None
+        self._state = "unknown"
+        self._observed_at: str | None = None
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            return {"status": self._state, "observed_at": self._observed_at,
+                    "freshness": "historical" if self._closed else "live" if self._state == "running" else "unknown",
+                    "status_is_as_of_observed_at": True,
+                    "live_status_requires": "session_read", "transcript": self.relative_path}
 
     @property
     def latest_output(self) -> dict[str, Any] | None:
@@ -581,10 +560,19 @@ class _SessionTranscript:
     def record_output(self, data: bytes) -> None:
         self._record_io("output", data)
 
+    def observe_state(self, state: str) -> None:
+        # session_read already has an audited tool-result/observation record.
+        with self._lock:
+            if not self._closed:
+                self._state = state
+                self._observed_at = datetime.now(timezone.utc).isoformat()
+
     def record_state(self, state: str) -> None:
         with self._lock:
             if self._closed:
                 return
+            self._state = state
+            self._observed_at = datetime.now(timezone.utc).isoformat()
             self._append_locked({
                 "direction": "state",
                 "state": state,
@@ -596,6 +584,8 @@ class _SessionTranscript:
             if self._closed:
                 return
             self._closed = True
+            self._state = state
+            self._observed_at = datetime.now(timezone.utc).isoformat()
             self._append_locked({
                 "direction": "state",
                 "state": state,

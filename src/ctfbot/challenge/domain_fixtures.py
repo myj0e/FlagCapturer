@@ -168,16 +168,12 @@ def create_domain_dataset(output: Path, *, authorize_model_data: bool = False,
         for name in ("TASK.md", "provenance.json"):
             (workspace / name).chmod(0o444)
         inputs.chmod(0o555)
-        oracle = root / "oracle.json"
-        oracle.write_text(json.dumps({"challenge_id": challenge_id, "source_commit": provenance["source_commit"],
-                                     "challenge_metadata_sha256": source_hash, "flag": flag}))
-        oracle.chmod(0o600)
         records.append({"challenge_id": challenge_id, "workspace": f"{challenge_id}/workspace",
-                        "oracle": f"{challenge_id}/oracle.json", "category": label, "labels": [label],
+                        "category": label, "labels": [label],
                         "provenance_sha256": hashlib.sha256((workspace / "provenance.json").read_bytes()).hexdigest(),
                         "exposure": "authored", "contamination": "mechanism_public_instance_generated", "mechanism": mechanism})
     manifest = output / "dataset.json"
-    manifest.write_text(json.dumps({"schema_version": 2, "dataset_id": f"authored-d-{nonce}",
+    manifest.write_text(json.dumps({"schema_version": 3, "dataset_id": f"authored-d-{nonce}",
                                     "version": "1.0.0" if suite == "core" else "2.0.0", "split": split, "license": "MIT", "cases": records}, indent=2))
     manifest.chmod(0o600)
     return manifest

@@ -14,7 +14,7 @@ from ctfbot.runtime.service_recovery import (
 
 
 FIXTURE_ARGV = ["/usr/local/bin/python3", "/opt/ctfbot-fixture/server.py"]
-_CASES = {"solve": "verified", "cancel": "user_cancelled", "cancel_startup": "user_cancelled",
+_CASES = {"solve": "candidate_unverified", "cancel": "user_cancelled", "cancel_startup": "user_cancelled",
           "provider_failure": "provider_error", "readiness_timeout": "error",
           "run_timeout": "budget_exhausted", "service_exit": "error"}
 _PROFILE_FIELDS = {"schema_version", "network_profile", "daemon", "service_image", "solver_image",

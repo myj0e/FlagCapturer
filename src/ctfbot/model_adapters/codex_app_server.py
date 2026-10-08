@@ -13,6 +13,8 @@ import time
 from collections import deque
 from typing import Any
 
+from ctfbot.model_adapters.mailbox import MessageBuffer, MessageQueue, PublicTextBuffer
+from ctfbot.model_adapters.events import normalize_event
 from ctfbot import __version__
 from ctfbot.evidence.redaction import redact_sensitive_text
 
@@ -36,9 +38,9 @@ class CodexAppServer:
         self.executable = executable or find_codex_cli()
         self.experimental_api = experimental_api
         self._process: subprocess.Popen[str] | None = None
-        self._messages: queue.Queue[dict[str, Any] | None] = queue.Queue()
-        self._notifications: deque[dict[str, Any]] = deque()
-        self._unmatched: deque[dict[str, Any]] = deque()
+        self._messages = MessageQueue()
+        self._notifications = MessageBuffer()
+        self._unmatched = MessageBuffer()
         self._stderr_tail: deque[str] = deque(maxlen=8)
         self._request_id = 0
         self._write_lock = threading.Lock()
@@ -146,6 +148,8 @@ class CodexAppServer:
     def _next_message(self, timeout: float) -> dict[str, Any]:
         try:
             message = self._messages.get(timeout=timeout)
+        except OverflowError as exc:
+            raise CodexAppServerError(str(exc)) from exc
         except queue.Empty as exc:
             raise CodexAppServerError(self._process_error('Timed out waiting for Codex App Server.')) from exc
         if message is None:
@@ -178,7 +182,7 @@ class CodexAppServer:
             if remaining <= 0:
                 raise CodexAppServerError(self._process_error(f'Timed out during `{method}`.'))
             message = self._next_message(remaining)
-            if message.get('id') == request_id:
+            if message.get('id') == request_id and 'method' not in message:
                 error = message.get('error')
                 if isinstance(error, dict):
                     code = error.get('code', 'unknown')
@@ -188,6 +192,9 @@ class CodexAppServer:
                 if not isinstance(result, dict):
                     raise CodexAppServerError(f'Codex App Server `{method}` returned an unexpected result.')
                 return result
+            if 'method' in message and 'id' in message and message.get('method') != 'item/tool/call':
+                self._send({'id': message['id'], 'error': {'code': -32601, 'message': 'Unsupported server request.'}})
+                continue
             if 'method' in message and 'id' not in message:
                 self._notifications.append(message)
             else:
@@ -312,6 +319,7 @@ class CodexAppServer:
         effort: str | None = None,
         timeout: float = 120,
         on_message: Any = None,
+        on_event: Any = None,
     ) -> dict[str, Any]:
         """Run one provider turn and answer ctfbot dynamic tool calls locally."""
         del tools  # Tool declarations are fixed when the thread starts.
@@ -337,9 +345,10 @@ class CodexAppServer:
             raise CodexAppServerError('Codex App Server did not return a turn id.')
 
         completed_turn: dict[str, Any] | None = None
-        messages: list[str] = []
-        deltas: list[str] = []
+        messages = PublicTextBuffer()
+        deltas = PublicTextBuffer()
         tool_count = 0
+        sequence = 0
         while completed_turn is None:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -350,6 +359,11 @@ class CodexAppServer:
             event_params = message.get('params', {})
             if not isinstance(event_params, dict):
                 event_params = {}
+
+            sequence += 1
+            event = normalize_event(message, thread_id, turn_id, sequence)
+            if event is not None and on_event is not None:
+                on_event(event)
 
             if method == 'item/tool/call' and message_id is not None:
                 if event_params.get('threadId') != thread_id or event_params.get('turnId') != turn_id:
@@ -413,7 +427,7 @@ class CodexAppServer:
             message = details.get('message') if isinstance(details, dict) else None
             reason = _redact(str(message)) if message else str(status)
             raise CodexAppServerError(f'Model request finished with status {status}: {reason}')
-        response = ''.join(messages or deltas).strip()
+        response = (messages.result() if messages.text else deltas.result()).strip()
         usage = completed_turn.get('usage')
         return {
             'text': response,
@@ -433,32 +447,39 @@ class CodexAppServer:
                 return False
             if method == 'turn/completed':
                 turn = params.get('turn', {})
-                return isinstance(turn, dict) and turn.get('id') == turn_id
+                return isinstance(turn, dict) and turn.get('id') == turn_id and params.get('threadId') in {None, thread_id}
             if method == 'item/tool/call':
                 return params.get('threadId') == thread_id and params.get('turnId') == turn_id
-            if method in {'item/completed', 'item/agentMessage/delta'}:
+            if method in {'item/started', 'item/completed', 'item/agentMessage/delta',
+                          'thread/tokenUsage/updated', 'thread/compacted', 'error'}:
                 return params.get('turnId') == turn_id and params.get('threadId') in {None, thread_id}
             return False
 
         while True:
-            for index, queued in enumerate(self._notifications):
+            while self._notifications:
+                queued = self._notifications.popleft()
                 if matches(queued):
-                    del self._notifications[index]
                     return queued
-            for index, queued in enumerate(self._unmatched):
+            for queued in list(self._unmatched):
                 if matches(queued):
-                    del self._unmatched[index]
+                    self._unmatched.remove(queued)
                     return queued
+                if 'method' in queued and 'id' in queued:
+                    self._unmatched.remove(queued)
+                    self._send({'id': queued['id'], 'error': {'code': -32601,
+                                'message': 'Request does not belong to the active ctfbot turn.'}})
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise CodexAppServerError('Codex App Server model turn timed out.')
             message = self._next_message(remaining)
             if matches(message):
                 return message
-            if 'method' in message and 'id' not in message:
-                self._notifications.append(message)
-            else:
+            if 'method' in message and 'id' in message:
+                self._send({'id': message['id'], 'error': {'code': -32601,
+                            'message': 'Request does not belong to the active ctfbot turn.'}})
+            elif 'method' not in message:
                 self._unmatched.append(message)
+            # Unrelated/stale notifications are consumed, not retained forever.
 
     def delete_thread(self, thread_id: str) -> None:
         self.request('thread/delete', {'threadId': thread_id}, timeout=10)
@@ -607,8 +628,8 @@ class CodexAppServer:
 
                 tool_calls = 0
                 tool_arguments: Any = None
-                messages: list[str] = []
-                deltas: list[str] = []
+                messages = PublicTextBuffer()
+                deltas = PublicTextBuffer()
                 completed_turn: dict[str, Any] | None = None
                 deadline = time.monotonic() + timeout
                 while completed_turn is None:
@@ -719,7 +740,6 @@ class CodexAppServer:
                                 'error': {'code': -32601, 'message': 'Unsupported server request.'},
                             }
                         )
-                        self._unmatched.append(message)
                     else:
                         self._unmatched.append(message)
 
@@ -735,7 +755,7 @@ class CodexAppServer:
                     raise CodexAppServerError(
                         f'Dynamic tool smoke expected one ctfbot_probe call; received {tool_calls}.'
                     )
-                response = ''.join(messages or deltas).strip()
+                response = (messages.result() if messages.text else deltas.result()).strip()
                 if response != 'CTFBOT_TOOL_ROUNDTRIP_OK':
                     raise CodexAppServerError(
                         f'Dynamic tool transport succeeded, but the final response was unexpected: '

@@ -15,7 +15,7 @@ from ctfbot.tui.safe_text import safe_plain_text
 IGNORED_EVENTS = {"run_metadata", "command_execution", "workflow_read", "domain_routing",
                  "run_state_changed", "observation_recorded", "candidate_recorded",
                  "candidate_check_recorded", "experiment_recorded", "claim_recorded",
-                 "model_turn_started", "summary_updated"}
+                 "model_turn_started", "summary_updated", "context_index_updated", "context_snapshot"}
 
 
 class TimelineState:
@@ -113,6 +113,11 @@ def _reply_summary(raw: str | None, name: str) -> str:
         names = list(packs) if isinstance(packs, dict) else packs if isinstance(packs, list) else []
         return f"可用工作流：{', '.join(map(str, names))}；题型线索：{', '.join(map(str, labels))}"
     fields = []
+    if value.get("output_warning") == "ordinary_pool_80_percent":
+        fields.append("工具回复额度已使用 80%，后续返回缩短；状态与证据仍可读取。")
+    for stream, preview in value.get("previews", {}).items():
+        if isinstance(preview, dict):
+            fields.append(f"{stream} 头部：{preview.get('head', '')}\n{stream} 尾部：{preview.get('tail', '')}")
     for key in ("stdout", "output", "output_preview", "preview", "stderr", "message", "content"):
         item = value.get(key)
         if isinstance(item, str) and item:
@@ -132,6 +137,7 @@ def _reply_summary(raw: str | None, name: str) -> str:
 def render_timeline(state: TimelineState) -> Text:
     """Render labeled blocks; meaning remains clear without color support."""
     output = Text()
+    output.append("上下文占用：未知（provider 未提供当前占用计数）\n", style="dim")
     for notice in state.notices:
         if notice.get("event_type") == "run_finished":
             continue
@@ -156,7 +162,7 @@ def render_timeline(state: TimelineState) -> Text:
                               style="bold red" if entry.get("emphasis") == "error" else "bold yellow")
     for notice in state.notices:
         if notice.get("event_type") == "run_finished":
-            output.append("\n◆ " + _notice_text(notice) + "\n", style="bold green" if notice.get("status") == "verified" else "bold yellow")
+            output.append("\n◆ " + _notice_text(notice) + "\n", style="bold yellow")
     if not state.rounds and not state.notices:
         output.append("等待模型开始本轮……", style="dim")
     return output
@@ -168,7 +174,7 @@ def _append_tool_card(output: Text, entry: dict[str, Any]) -> None:
     status = safe_plain_text(str(result.get("status", "等待返回")))
     duration = f" · {event['elapsed_seconds']} 秒" if isinstance(event, dict) and event.get("elapsed_seconds") is not None else ""
     error = entry.get("emphasis") == "error"
-    style = "bold red" if error else "bold green" if status in {"ok", "verified", "local_check_passed", "session_exited", "session_closed"} else "bold cyan"
+    style = "bold red" if error else "bold green" if status in {"ok", "local_check_passed", "session_exited", "session_closed"} else "bold cyan"
     title = f"  ┌─ 工具 #{entry.get('index', '?')} · {safe_plain_text(str(entry.get('name', 'unknown')))} · {status}{duration} ─\n"
     output.append(title, style=style)
     args = entry.get("args") if isinstance(entry.get("args"), dict) else {}
@@ -186,16 +192,21 @@ def _append_tool_card(output: Text, entry: dict[str, Any]) -> None:
             output.append("  │ 错误：" + safe_plain_text(str(result["error_kind"])) + "\n", style="bold red")
     if entry.get("candidate") is not None:
         candidate_status = safe_plain_text(str(result.get("status", "unverified")))
-        verified = result.get("verified") is True and result.get("verification_method") == "exact-string controller-only"
-        label = "控制器精确验证" if verified else f"{candidate_status} · 正确性未确认"
-        candidate_style = "bold green" if verified else "bold yellow"
-        output.append(f"  ├─ 候选 · {label}\n", style=candidate_style)
-        output.append("  │ " + safe_plain_text(entry["candidate"]) + "\n", style="green" if verified else "yellow")
+        output.append(f"  ├─ 候选 · {candidate_status} · 正确性未确认\n", style="bold yellow")
+        output.append("  │ " + safe_plain_text(entry["candidate"]) + "\n", style="yellow")
     output.append("  └────────────────────────────────────────────\n\n", style="dim")
 
 
 def _notice_text(event: dict[str, Any]) -> str:
     kind = event.get("event_type", "event")
+    if kind == "provider_context_usage":
+        return f"上下文占用未知 · provider 窗口容量：{event.get('capacity') or '未知'} tokens；账单用量单独记录"
+    if kind == "provider_compaction_started":
+        return "已观测上下文压缩开始"
+    if kind == "provider_compaction_completed":
+        return "已观测上下文压缩完成 · 运行状态待补发"
+    if kind == "context_restore_delivered":
+        return f"运行状态已补发 · revision {event.get('revision')} · {event.get('channel')}"
     if kind == "run_finished":
         return f"运行结束：{event.get('status', 'unknown')} · {event.get('stop_reason', 'unknown')}"
     if kind == "completion_recorded":

@@ -83,11 +83,11 @@ def events(result) -> list[dict]:
 
 
 def test_service_fixture_import_is_private_readonly_and_defaults_to_no_model_authorization(tmp_path: Path) -> None:
-    workspace, oracle = import_service_fixture(tmp_path / "fixture", IMAGE)
-    _, _, provenance, task = validate_baseline_snapshot(workspace, oracle, tmp_path / "runs")
+    workspace = import_service_fixture(tmp_path / "fixture", IMAGE)
+    _, provenance, task = validate_baseline_snapshot(workspace)
     assert provenance["model_data_authorized"] is False
     assert SYNTHETIC_FLAG not in task
-    assert not oracle.is_relative_to(workspace)
+    assert not (workspace.parent / "oracle.json").exists()
     assert (workspace.stat().st_mode & 0o777) == 0o700
     assert ((workspace / "provenance.json").stat().st_mode & 0o777) == 0o444
     with pytest.raises(FileExistsError):
@@ -102,7 +102,7 @@ def test_service_fixture_import_is_private_readonly_and_defaults_to_no_model_aut
     {"ports": ["0.0.0.0:31337:31337"]}, {"argv": ["relative-program"]},
 ])
 def test_unsafe_service_manifest_is_rejected_before_dependencies(tmp_path: Path, changes: dict) -> None:
-    workspace, oracle = fixture(tmp_path)
+    workspace = fixture(tmp_path)
     path = workspace / "provenance.json"
     provenance = json.loads(path.read_text())
     provenance["local_service"].update(changes)
@@ -110,28 +110,28 @@ def test_unsafe_service_manifest_is_rejected_before_dependencies(tmp_path: Path,
     path.write_text(json.dumps(provenance))
     path.chmod(0o444)
     with pytest.raises(BaselineAdmissionError, match="invalid local service"):
-        validate_baseline_snapshot(workspace, oracle, tmp_path / "runs")
+        validate_baseline_snapshot(workspace)
 
 
 def test_default_application_previews_but_does_not_enable_live_services(tmp_path: Path) -> None:
-    workspace, oracle = fixture(tmp_path)
+    workspace = fixture(tmp_path)
     service = LocalChallengeService(model_factory=lambda: pytest.fail("model started"), model_metadata={})
-    preview = service.preview(workspace, oracle, IMAGE, tmp_path / "runs")
+    preview = service.preview(workspace, IMAGE, tmp_path / "runs")
     assert preview.model_data_authorized
     assert preview.service_endpoint == "challenge:31337"
     assert not preview.start_allowed
     assert "isolation acceptance" in preview.start_block_reason
     with pytest.raises(BaselineAdmissionError, match="isolation acceptance"):
-        service.run(workspace, oracle, IMAGE, tmp_path / "runs")
+        service.run(workspace, IMAGE, tmp_path / "runs")
     with pytest.raises(BaselineAdmissionError, match="isolation acceptance"):
-        run_baseline(workspace=workspace, oracle_path=oracle, runtime_image=IMAGE,
+        run_baseline(workspace=workspace, runtime_image=IMAGE,
                      runs_root=tmp_path / "runs", model_factory=lambda: pytest.fail("model started"),
                      model_metadata={})
     assert not (tmp_path / "runs").exists()
 
 
-def test_local_service_health_agent_verification_report_and_cleanup(tmp_path: Path) -> None:
-    workspace, oracle = fixture(tmp_path)
+def test_local_service_health_candidate_report_and_cleanup(tmp_path: Path) -> None:
+    workspace = fixture(tmp_path)
     docker = FakeDocker()
     states: list[str] = []
     runtimes: list[DockerLocalServiceRuntime] = []
@@ -160,6 +160,7 @@ def test_local_service_health_agent_verification_report_and_cleanup(tmp_path: Pa
             reply = on_tool_call(ToolCall("command_run", {"argv": ["python3", "solve.py"]}))
             assert SYNTHETIC_FLAG in reply.content
             on_tool_call(ToolCall("candidate_submit", {"candidate": SYNTHETIC_FLAG}))
+            on_tool_call(ToolCall("run_complete", {"outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Synthetic response recorded", "unresolved": []}))
             return TurnResult("", tool_calls=2)
 
         def close(self):
@@ -176,9 +177,9 @@ def test_local_service_health_agent_verification_report_and_cleanup(tmp_path: Pa
     ), patch.object(
         DockerRuntime, "execute", probe_or_solve
     ):
-        result = service.run(workspace, oracle, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
+        result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
 
-    assert result.verified
+    assert result.status == "candidate_unverified"
     assert not docker.resources
     assert states == ["preparing", "network_created", "service_started", "healthy", "logs_collected", "cleaned"]
     recorded = events(result)
@@ -196,13 +197,14 @@ def test_local_service_health_agent_verification_report_and_cleanup(tmp_path: Pa
         assert f"--network={runtimes[0].network_name}" in command
         assert "--read-only" in command and "--cap-drop=ALL" in command
         assert not any(flag in command for flag in ["--privileged", "--publish", "-p", "--network=host"])
-        assert str(oracle) not in " ".join(command)
+        mounts = [arg for arg in command if arg.startswith("type=bind,")]
+        assert all(f"source={workspace / 'input'},target=/challenge,readonly" in mount for mount in mounts)
 
 
 @pytest.mark.parametrize("outcome", ["startup_failure", "cancel_during_readiness", "cancel_during_agent",
                                      "provider_failure", "cleanup_failure"])
 def test_local_service_failure_and_cancel_keep_evidence_and_cleanup(tmp_path: Path, outcome: str) -> None:
-    workspace, oracle = fixture(tmp_path)
+    workspace = fixture(tmp_path)
     docker = FakeDocker(service_running=outcome != "startup_failure", fail_remove=outcome == "cleanup_failure")
     control = RunControl()
     provider_calls = []
@@ -237,7 +239,7 @@ def test_local_service_failure_and_cancel_keep_evidence_and_cleanup(tmp_path: Pa
     ), patch.object(
         DockerRuntime, "execute", probe
     ):
-        result = service.run(workspace, oracle, IMAGE, tmp_path / "runs", RunLimits(max_turns=1), control=control)
+        result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1), control=control)
     recorded = events(result)
     states = [e["state"] for e in recorded if e["event_type"] == "service_lifecycle"]
     if outcome == "cleanup_failure":
@@ -258,7 +260,7 @@ def test_local_service_failure_and_cancel_keep_evidence_and_cleanup(tmp_path: Pa
 
 @pytest.mark.parametrize("kwargs", [{"internal": False}, {"volumes": True}])
 def test_runtime_rejects_unsafe_image_or_network_without_starting_provider(tmp_path: Path, kwargs: dict) -> None:
-    workspace, oracle = fixture(tmp_path)
+    workspace = fixture(tmp_path)
     docker = FakeDocker(**kwargs)
     service = LocalChallengeService(
         model_factory=lambda: pytest.fail("model started"), model_metadata={},
@@ -266,14 +268,14 @@ def test_runtime_rejects_unsafe_image_or_network_without_starting_provider(tmp_p
             root, image, spec, event_sink=sink),
     )
     with patch("ctfbot.runtime.local_service.subprocess.run", side_effect=docker):
-        result = service.run(workspace, oracle, IMAGE, tmp_path / "runs")
+        result = service.run(workspace, IMAGE, tmp_path / "runs")
     assert result.status == "error"
     assert not docker.resources
     assert not any(call[1] == "create" for call in docker.calls)
 
 
 def test_cleanup_refuses_resources_owned_by_another_run(tmp_path: Path) -> None:
-    workspace, _oracle = fixture(tmp_path)
+    workspace = fixture(tmp_path)
     spec = LocalServiceSpec.from_manifest(json.loads((workspace / "provenance.json").read_text())["local_service"])
     runtime = DockerLocalServiceRuntime(workspace / "input", IMAGE, spec, event_sink=lambda _details: None)
     runtime._service_attempted = True
@@ -288,7 +290,7 @@ def test_cleanup_refuses_resources_owned_by_another_run(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("wall_limit", [None, 0.2])
 def test_readiness_timeout_cleans_service_without_starting_provider(tmp_path: Path, wall_limit: float | None) -> None:
-    workspace, oracle = fixture(tmp_path)
+    workspace = fixture(tmp_path)
     path = workspace / "provenance.json"
     provenance = json.loads(path.read_text())
     provenance["local_service"]["startup_timeout_seconds"] = 1
@@ -304,7 +306,7 @@ def test_readiness_timeout_cleans_service_without_starting_provider(tmp_path: Pa
     with patch("ctfbot.runtime.local_service.subprocess.run", side_effect=docker), patch(
         "ctfbot.runtime.local_service.subprocess.Popen", side_effect=docker.popen
     ), patch.object(DockerRuntime, "execute", return_value=CommandResult(1, b"", b"not ready")):
-        result = service.run(workspace, oracle, IMAGE, tmp_path / "runs",
+        result = service.run(workspace, IMAGE, tmp_path / "runs",
                              RunLimits(wall_time_seconds=wall_limit or 1800))
     assert result.status == ("budget_exhausted" if wall_limit else "error")
     assert not docker.resources
@@ -314,7 +316,7 @@ def test_readiness_timeout_cleans_service_without_starting_provider(tmp_path: Pa
 
 
 def test_offline_import_cannot_silently_activate_service_config(tmp_path: Path) -> None:
-    workspace, oracle = fixture(tmp_path)
+    workspace = fixture(tmp_path)
     path = workspace / "provenance.json"
     provenance = json.loads(path.read_text())
     provenance["import_mode"] = "static_files_only"
@@ -322,11 +324,11 @@ def test_offline_import_cannot_silently_activate_service_config(tmp_path: Path) 
     path.write_text(json.dumps(provenance))
     path.chmod(0o444)
     with pytest.raises(BaselineAdmissionError, match="requires local_service import mode"):
-        validate_baseline_snapshot(workspace, oracle, tmp_path / "runs")
+        validate_baseline_snapshot(workspace)
 
 
 def test_missing_daemon_is_not_mistaken_for_a_removed_resource(tmp_path: Path) -> None:
-    workspace, _oracle = fixture(tmp_path)
+    workspace = fixture(tmp_path)
     spec = LocalServiceSpec.from_manifest(json.loads((workspace / "provenance.json").read_text())["local_service"])
     states = []
     runtime = DockerLocalServiceRuntime(workspace / "input", IMAGE, spec, event_sink=states.append)
@@ -340,7 +342,7 @@ def test_missing_daemon_is_not_mistaken_for_a_removed_resource(tmp_path: Path) -
 
 
 def test_evidence_write_failure_still_removes_created_resources(tmp_path: Path) -> None:
-    workspace, _oracle = fixture(tmp_path)
+    workspace = fixture(tmp_path)
     spec = LocalServiceSpec.from_manifest(json.loads((workspace / "provenance.json").read_text())["local_service"])
     docker = FakeDocker()
 

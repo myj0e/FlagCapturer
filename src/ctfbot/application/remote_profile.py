@@ -17,7 +17,7 @@ from ctfbot.runtime.supervised import REMOTE_NETWORK_PROFILE
 _PROFILE_FIELDS = {"schema_version", "network_profile", "daemon", "solver_image", "grant_sha256",
                    "acceptance_path", "acceptance_sha256", "authorization_basis"}
 REQUIRED_CASES = {
-    "solve": "verified",
+    "solve": "candidate_unverified",
     "wrong_host": "denied", "wrong_port": "denied", "wrong_protocol": "denied",
     "literal_ip_mismatch": "denied", "missing_grant": "denied", "expired_grant": "denied",
     "input_limit": "denied", "output_limit": "bounded",

@@ -28,7 +28,7 @@ from ctfbot.runtime.docker import validate_image_reference
 from ctfbot.runtime.local_service import DockerLocalServiceRuntime
 from ctfbot.runtime.docker import RuntimeErrorSafe
 from ctfbot.runtime.service_recovery import (
-    NETWORK_PROFILE, daemon_identity, read_private, unfinished,
+    NETWORK_PROFILE, daemon_identity, unfinished,
 )
 
 
@@ -92,7 +92,7 @@ def confirm_removed(runtime: DockerLocalServiceRuntime) -> None:
 
 
 def network_acceptance(output: Path, image: str) -> dict:
-    workspace, _ = import_service_fixture(output / "network-fixture", image)
+    workspace = import_service_fixture(output / "network-fixture", image)
     spec = LocalServiceSpec.from_manifest(json.loads((workspace / "provenance.json").read_text())["local_service"])
     runtimes = [DockerLocalServiceRuntime(workspace / "input", image, spec, event_sink=lambda _: None)
                 for _ in range(2)]
@@ -144,7 +144,7 @@ def network_acceptance(output: Path, image: str) -> dict:
 
 
 def lifecycle_acceptance(output: Path, image: str, outcome: str) -> dict:
-    workspace, oracle = import_service_fixture(output / outcome, image, authorize_model_data=True)
+    workspace = import_service_fixture(output / outcome, image, authorize_model_data=True)
     if outcome in {"readiness_timeout", "run_timeout", "service_exit"}:
         path = workspace / "provenance.json"
         manifest = json.loads(path.read_text())
@@ -180,6 +180,7 @@ def lifecycle_acceptance(output: Path, image: str, outcome: str) -> dict:
             candidate = payload["stdout"].strip()
             require(candidate == SYNTHETIC_FLAG, "unexpected service response")
             on_tool_call(ToolCall("candidate_submit", {"candidate": candidate}))
+            on_tool_call(ToolCall("run_complete", {"outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Synthetic response recorded", "unresolved": []}))
             return TurnResult("", tool_calls=2)
 
         def close(self):
@@ -193,10 +194,10 @@ def lifecycle_acceptance(output: Path, image: str, outcome: str) -> dict:
 
     service = LocalChallengeService(model_factory=make_model, model_metadata={"provider": "synthetic"},
                                     service_runtime_factory=factory)
-    result = service.run(workspace, oracle, image, output / "runs",
+    result = service.run(workspace, image, output / "runs",
                          RunLimits(max_turns=1, wall_time_seconds=2 if outcome == "run_timeout" else 30,
                                    tool_timeout_seconds=5), control=control)
-    expected = {"solve": "verified", "cancel": "user_cancelled", "provider_failure": "provider_error",
+    expected = {"solve": "candidate_unverified", "cancel": "user_cancelled", "provider_failure": "provider_error",
                 "readiness_timeout": "error", "run_timeout": "budget_exhausted",
                 "service_exit": "error", "cancel_startup": "user_cancelled"}[outcome]
     require(result.status == expected, f"{outcome}: expected {expected}, got {result.status}")
@@ -220,7 +221,7 @@ def lifecycle_acceptance(output: Path, image: str, outcome: str) -> dict:
 
 
 def recovery_acceptance(output: Path, image: str) -> dict:
-    workspace, _ = import_service_fixture(output / "recovery-fixture", image)
+    workspace = import_service_fixture(output / "recovery-fixture", image)
     spec = LocalServiceSpec.from_manifest(json.loads((workspace / "provenance.json").read_text())["local_service"])
     real_docker = shutil.which("docker")
     require(real_docker is not None, "Docker CLI missing")

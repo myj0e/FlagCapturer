@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import shutil
@@ -23,9 +22,10 @@ IMAGE = "sha256:" + "a" * 64
 
 
 @pytest.mark.parametrize("failure", [{"environment_error": True}, {"status": "provider_error"}])
-def test_verified_then_failure_keeps_eligible_denominator(failure):
-    metrics = _aggregate([{"run_id": "authored", "verified": True, **failure}])
-    assert metrics["verified_over_eligible_started"] == [1, 1]
+def test_candidate_record_survives_failure_without_counting_completion(failure):
+    metrics = _aggregate([{"run_id": "authored", "candidate_records": 1, **failure}])
+    assert metrics["candidate_runs"] == 1
+    assert metrics["completed_with_candidate_over_scheduled"] == [0, 1]
 
 
 class AuthoredHostRuntime:
@@ -56,7 +56,7 @@ def registry(tmp_path, case):
     work = tmp_path / "controller"
     work.mkdir()
     return ToolRegistry(case["workspace"] / "input", work, evidence,
-                        AuthoredHostRuntime(case["workspace"] / "input", IMAGE), case["oracle"])
+                        AuthoredHostRuntime(case["workspace"] / "input", IMAGE))
 
 
 @pytest.mark.parametrize("pack,operation,path", [
@@ -115,28 +115,27 @@ def test_memory_review_namespaces_source_changes_and_revocation(tmp_path):
 
 def test_dataset_evaluation_budget_metrics_and_replay(dataset, tmp_path):
     loaded = load_dataset(dataset)
-    flags = [json.loads(case["oracle"].read_text())["flag"] for case in loaded["cases"]]
+    flags = [f"authored-candidate-{i}" for i in range(len(loaded["cases"]))]
     queue = iter(flags)
     service = LocalChallengeService(model_factory=lambda: FakeModelSession([
-        ScriptedTurn(tool_calls=(ToolCall("candidate_submit", {"candidate": next(queue)}),))]),
+        ScriptedTurn(tool_calls=(ToolCall("candidate_submit", {"candidate": next(queue)}), ToolCall("run_complete", {"outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Retain candidate", "unresolved": ["competition confirmation"]}),))]),
         model_metadata={"provider": "unit-only"}, runtime_factory=AuthoredHostRuntime)
     summary = run_evaluation(dataset_path=dataset, service=service, runtime_image=IMAGE, output=tmp_path / "evaluations",
                              limits=RunLimits(max_turns=1), max_total_turns=2, max_total_tool_calls=10)
     payload = json.loads(summary.read_text())
-    assert payload["aggregate"]["verified_over_scheduled"] == [2, 6]
+    assert payload["aggregate"]["completed_with_candidate_over_scheduled"] == [2, 6]
     assert payload["aggregate"]["not_run"] == 4
     assert payload["remaining_turns"] == 0
-    assert payload["aggregate"]["cost_per_verified"] is None
+    assert payload["aggregate"]["cost_per_run"] is None
     assert all(flag not in summary.read_text() for flag in flags)
     case = loaded["cases"][0]
     runtime_factory = lambda root, image: AuthoredHostRuntime(root, image)
     run_service = LocalChallengeService(model_factory=lambda: FakeModelSession([ScriptedTurn(tool_calls=(
         ToolCall("command_run", {"argv": ["python3", "-c", "print('stable authored output')"]}),))]),
         model_metadata={"provider": "unit-only"}, runtime_factory=runtime_factory)
-    result = run_service.run(case["workspace"], case["oracle"], IMAGE, tmp_path / "original", RunLimits(max_turns=1))
+    result = run_service.run(case["workspace"], IMAGE, tmp_path / "original", RunLimits(max_turns=1))
     assert audit_run(Path(result.run_dir))["integrity"] == "passed"
-    replay = replay_run(run_dir=Path(result.run_dir), workspace=case["workspace"], oracle=case["oracle"],
-                        output=tmp_path / "replays", runtime_factory=runtime_factory)
+    replay = replay_run(run_dir=Path(result.run_dir), workspace=case["workspace"], output=tmp_path / "replays", runtime_factory=runtime_factory)
     assert json.loads(replay.read_text())["status"] == "matched"
     artifact = next((Path(result.run_dir) / "artifacts").iterdir())
     artifact.write_bytes(b"modified")
@@ -150,3 +149,23 @@ def test_holdout_separation_and_unauthorized_preflight(dataset, tmp_path):
     with pytest.raises(PermissionError):
         run_evaluation(dataset_path=holdout, service=service, runtime_image=IMAGE, output=tmp_path / "denied",
                        limits=RunLimits(), max_total_turns=1, max_total_tool_calls=1, development_reference=dataset)
+
+
+def test_generated_datasets_have_no_answer_files_and_reject_old_schema(dataset):
+    payload = json.loads(dataset.read_text())
+    assert payload["schema_version"] == 3
+    assert all("oracle" not in case for case in payload["cases"])
+    assert not list(dataset.parent.rglob("oracle.json"))
+    payload["schema_version"] = 2
+    dataset.write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match="version-3"):
+        load_dataset(dataset)
+
+
+def test_failed_candidate_submission_is_not_a_recorded_candidate_run():
+    metrics = _aggregate([{"run_id": "authored", "status": "unsolved",
+                           "candidate_submissions": 1, "candidate_records": 0}])
+    assert metrics["candidate_runs"] == 0
+    assert metrics["completed_with_candidate"] == 0
+    assert metrics["unsolved_started"] == 1
+    assert "verified" not in metrics

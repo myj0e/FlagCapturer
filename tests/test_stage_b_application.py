@@ -17,7 +17,7 @@ from ctfbot.tools.registry import CommandResult
 IMAGE = "sha256:" + "a" * 64
 
 
-def make_workspace(root: Path, *, authorized: bool = True) -> tuple[Path, Path]:
+def make_workspace(root: Path, *, authorized: bool = True) -> Path:
     workspace = root / "workspace"
     input_root = workspace / "input"
     input_root.mkdir(parents=True, mode=0o700)
@@ -52,17 +52,7 @@ def make_workspace(root: Path, *, authorized: bool = True) -> tuple[Path, Path]:
     (workspace / "provenance.json").write_text(json.dumps(provenance), encoding="utf-8")
     os.chmod(workspace / "provenance.json", 0o444)
 
-    private = root / "private"
-    private.mkdir(mode=0o700)
-    oracle = private / "oracle.json"
-    oracle.write_text(json.dumps({
-        "challenge_id": challenge_id,
-        "source_commit": "synthetic-commit",
-        "challenge_metadata_sha256": metadata_hash,
-        "flag": "CTFBOT_SYNTHETIC{secret-value}",
-    }), encoding="utf-8")
-    os.chmod(oracle, 0o600)
-    return workspace, oracle
+    return workspace
 
 
 class FakeRuntime:
@@ -91,11 +81,11 @@ def service_for(model_factory, runtime_factory, *, model_metadata=None) -> Local
 
 
 def test_preview_reports_hash_authorization_verifier_and_offline_profile(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path)
+    workspace = make_workspace(tmp_path)
     service = service_for(lambda: pytest.fail("preview constructed a model"),
                           lambda *_: pytest.fail("preview constructed a runtime"))
 
-    preview = service.preview(workspace, oracle, IMAGE, tmp_path / "runs", RunLimits())
+    preview = service.preview(workspace, IMAGE, tmp_path / "runs", RunLimits())
 
     assert preview.challenge_id == "stage-b-synthetic"
     assert preview.import_mode == "static_files_only"
@@ -104,14 +94,14 @@ def test_preview_reports_hash_authorization_verifier_and_offline_profile(tmp_pat
     assert preview.inputs[0].bytes == len(b"synthetic attachment bytes")
     assert preview.model_data_authorized is True
     assert preview.authorization_basis == "synthetic test authorization"
-    assert preview.verifier == "exact-string controller-only"
+    assert preview.verifier == "model-selected candidate; correctness unverified"
     assert preview.runtime_profile == "offline Docker; read-only input; bounded tmpfs workdir"
     assert preview.runtime_image == IMAGE
     assert "CTFBOT_SYNTHETIC{secret-value}" not in repr(preview)
 
 
 def test_unauthorized_run_stops_before_model_or_runtime_factory(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path, authorized=False)
+    workspace = make_workspace(tmp_path, authorized=False)
     calls: list[str] = []
     service = service_for(
         lambda: calls.append("model"),
@@ -119,26 +109,26 @@ def test_unauthorized_run_stops_before_model_or_runtime_factory(tmp_path: Path) 
     )
 
     with pytest.raises(BaselineAdmissionError, match="transmission to a model"):
-        service.run(workspace, oracle, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
+        service.run(workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
 
     assert calls == []
     assert not (tmp_path / "runs").exists()
 
 
 def test_invalid_image_stops_before_model_or_runtime_factory(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path)
+    workspace = make_workspace(tmp_path)
     calls: list[str] = []
     service = service_for(lambda: calls.append("model"), lambda *_: calls.append("runtime"))
 
     with pytest.raises(ValueError, match="pinned"):
-        service.run(workspace, oracle, "registry.example/tool:latest", tmp_path / "runs", RunLimits())
+        service.run(workspace, "registry.example/tool:latest", tmp_path / "runs", RunLimits())
 
     assert calls == []
     assert not (tmp_path / "runs").exists()
 
 
 def test_service_run_uses_injected_model_and_runtime_after_preflight(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path)
+    workspace = make_workspace(tmp_path)
     calls: list[str] = []
     runtime_instances: list[FakeRuntime] = []
 
@@ -153,7 +143,7 @@ def test_service_run_uses_injected_model_and_runtime_after_preflight(tmp_path: P
         return runtime
 
     service = service_for(make_model, make_runtime)
-    result = service.run(workspace, oracle, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
+    result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
 
     assert result.status == "unverified"
     assert calls == ["model", "runtime"]
@@ -163,7 +153,7 @@ def test_service_run_uses_injected_model_and_runtime_after_preflight(tmp_path: P
 
 
 def test_invalid_admission_stops_before_model_or_runtime_factory(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path)
+    workspace = make_workspace(tmp_path)
     provenance_path = workspace / "provenance.json"
     provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
     provenance["formal_admission"] = "pending"
@@ -174,7 +164,7 @@ def test_invalid_admission_stops_before_model_or_runtime_factory(tmp_path: Path)
     service = service_for(lambda: calls.append("model"), lambda *_: calls.append("runtime"))
 
     with pytest.raises(BaselineAdmissionError, match="formal A4 admission"):
-        service.run(workspace, oracle, IMAGE, tmp_path / "runs", RunLimits())
+        service.run(workspace, IMAGE, tmp_path / "runs", RunLimits())
 
     assert calls == []
     assert not (tmp_path / "runs").exists()

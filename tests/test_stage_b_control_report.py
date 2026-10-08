@@ -30,7 +30,7 @@ IMAGE = "sha256:" + "b" * 64
 CANDIDATE = "CTFBOT_SYNTHETIC{stage_b_report_secret}"
 
 
-def make_workspace(root: Path) -> tuple[Path, Path]:
+def make_workspace(root: Path) -> Path:
     workspace = root / "workspace"
     input_root = workspace / "input"
     input_root.mkdir(parents=True, mode=0o700)
@@ -62,17 +62,7 @@ def make_workspace(root: Path) -> tuple[Path, Path]:
     }
     (workspace / "provenance.json").write_text(json.dumps(provenance), encoding="utf-8")
     os.chmod(workspace / "provenance.json", 0o444)
-    private = root / "private"
-    private.mkdir(mode=0o700)
-    oracle = private / "oracle.json"
-    oracle.write_text(json.dumps({
-        "challenge_id": "stage-b-report",
-        "source_commit": "synthetic-commit",
-        "challenge_metadata_sha256": metadata_hash,
-        "flag": CANDIDATE,
-    }), encoding="utf-8")
-    os.chmod(oracle, 0o600)
-    return workspace, oracle
+    return workspace
 
 
 class QuietRuntime:
@@ -103,13 +93,13 @@ def make_service(model_factory, runtime_factory):
     )
 
 
-def run_in_thread(service, workspace: Path, oracle: Path, root: Path, control: RunControl, event_sink=None):
+def run_in_thread(service, workspace: Path, root: Path, control: RunControl, event_sink=None):
     outcome: dict[str, object] = {}
 
     def target() -> None:
         try:
             outcome["result"] = service.run(
-                workspace, oracle, IMAGE, root / "runs", RunLimits(max_turns=1, max_tool_calls=2),
+                workspace, IMAGE, root / "runs", RunLimits(max_turns=1, max_tool_calls=2),
                 control=control,
                 event_sink=event_sink,
             )
@@ -122,7 +112,7 @@ def run_in_thread(service, workspace: Path, oracle: Path, root: Path, control: R
 
 
 def test_stop_interrupts_blocked_model_turn_and_closes_runtime(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path)
+    workspace = make_workspace(tmp_path)
     started = threading.Event()
     release = threading.Event()
 
@@ -153,7 +143,7 @@ def test_stop_interrupts_blocked_model_turn_and_closes_runtime(tmp_path: Path) -
 
     control = RunControl()
     service = make_service(lambda: model, make_runtime)
-    thread, outcome = run_in_thread(service, workspace, oracle, tmp_path, control)
+    thread, outcome = run_in_thread(service, workspace, tmp_path, control)
     assert started.wait(3)
 
     assert control.cancel() is True
@@ -174,7 +164,7 @@ def test_stop_interrupts_blocked_model_turn_and_closes_runtime(tmp_path: Path) -
 
 
 def test_stop_interrupts_blocked_command_and_preserves_cleanup(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path)
+    workspace = make_workspace(tmp_path)
     started = threading.Event()
     release = threading.Event()
 
@@ -195,7 +185,7 @@ def test_stop_interrupts_blocked_command_and_preserves_cleanup(tmp_path: Path) -
     model = FakeModelSession((ScriptedTurn(tool_calls=(ToolCall("command_run", {"argv": ["sleep"]}),)),))
     control = RunControl()
     service = make_service(lambda: model, lambda *_: runtime)
-    thread, outcome = run_in_thread(service, workspace, oracle, tmp_path, control)
+    thread, outcome = run_in_thread(service, workspace, tmp_path, control)
     assert started.wait(3)
 
     control.cancel()
@@ -210,15 +200,15 @@ def test_stop_interrupts_blocked_command_and_preserves_cleanup(tmp_path: Path) -
     assert model.closed is True
 
 
-def test_verified_result_keeps_verifier_metadata_and_report_excludes_candidate(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path)
+def test_candidate_result_records_unverified_metadata_and_redacts_report(tmp_path: Path) -> None:
+    workspace = make_workspace(tmp_path)
     control = RunControl()
-    model = FakeModelSession((ScriptedTurn(tool_calls=(ToolCall("candidate_submit", {"candidate": CANDIDATE}),)),))
+    model = FakeModelSession((ScriptedTurn(tool_calls=(ToolCall("candidate_submit", {"candidate": CANDIDATE}), ToolCall("run_complete", {"outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Retain candidate", "unresolved": ["competition confirmation"]}),)),))
     events: list[dict] = []
     service = make_service(lambda: model, lambda root, image: QuietRuntime(root, image))
 
     result = service.run(
-        workspace, oracle, IMAGE, tmp_path / "runs", RunLimits(max_turns=1),
+        workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1),
         control=control,
         event_sink=events.append,
     )
@@ -229,9 +219,9 @@ def test_verified_result_keeps_verifier_metadata_and_report_excludes_candidate(t
         event for event in events
         if event["event_type"] == "tool_result" and event.get("name") == "candidate_submit"
     )
-    assert result.verified is True
-    assert candidate_result["result"]["status"] == "verified"
-    assert candidate_result["result"]["verification_method"] == "exact-string controller-only"
+    assert result.status == "candidate_unverified"
+    assert candidate_result["result"]["status"] == "unverified"
+    assert candidate_result["result"]["verification_method"] == "none"
     assert "stage-b-report" in report
     assert "input.txt" in report
     assert "limits" in report
@@ -256,7 +246,7 @@ def test_event_sink_failure_does_not_prevent_persisted_event(tmp_path: Path) -> 
 
 
 def test_runtime_startup_error_returns_reportable_error_and_closes_resources(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path)
+    workspace = make_workspace(tmp_path)
     model = FakeModelSession(())
 
     class BrokenRuntime(QuietRuntime):
@@ -266,7 +256,7 @@ def test_runtime_startup_error_returns_reportable_error_and_closes_resources(tmp
     runtime = BrokenRuntime(workspace / "input", IMAGE)
     service = make_service(lambda: model, lambda *_: runtime)
 
-    result = service.run(workspace, oracle, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
+    result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
 
     assert result.status == "error"
     assert result.stop_reason == "runtime_or_controller_error"
@@ -280,13 +270,13 @@ def test_runtime_startup_error_returns_reportable_error_and_closes_resources(tmp
 
 
 def test_model_initialization_failure_has_a_durable_run_record(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path)
+    workspace = make_workspace(tmp_path)
 
     def broken_model():
         raise RuntimeError("synthetic provider startup failure")
 
     service = make_service(broken_model, lambda *_: pytest.fail("runtime must not start"))
-    result = service.run(workspace, oracle, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
+    result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
 
     state_path = Path(result.run_dir) / "run-state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
@@ -308,7 +298,7 @@ def test_model_initialization_failure_has_a_durable_run_record(tmp_path: Path) -
 
 
 def test_provider_timeout_is_a_terminal_timed_out_lifecycle(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path)
+    workspace = make_workspace(tmp_path)
 
     class TimeoutModel:
         closed = False
@@ -322,7 +312,7 @@ def test_provider_timeout_is_a_terminal_timed_out_lifecycle(tmp_path: Path) -> N
 
     model = TimeoutModel()
     service = make_service(lambda: model, lambda root, image: QuietRuntime(root, image))
-    result = service.run(workspace, oracle, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
+    result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
 
     state = json.loads((Path(result.run_dir) / "run-state.json").read_text(encoding="utf-8"))
     events = [json.loads(line) for line in (Path(result.run_dir) / "events.jsonl").read_text().splitlines()]
@@ -335,14 +325,14 @@ def test_provider_timeout_is_a_terminal_timed_out_lifecycle(tmp_path: Path) -> N
 
 
 def test_provider_cleanup_error_is_visible_in_run_state(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path)
+    workspace = make_workspace(tmp_path)
 
     class CloseFailureModel(FakeModelSession):
         def close(self) -> None:
             raise RuntimeError("synthetic provider cleanup failure")
 
     service = make_service(lambda: CloseFailureModel(()), lambda root, image: QuietRuntime(root, image))
-    result = service.run(workspace, oracle, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
+    result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
 
     state = json.loads((Path(result.run_dir) / "run-state.json").read_text(encoding="utf-8"))
     events = [json.loads(line) for line in (Path(result.run_dir) / "events.jsonl").read_text().splitlines()]
@@ -354,7 +344,7 @@ def test_provider_cleanup_error_is_visible_in_run_state(tmp_path: Path) -> None:
 
 
 def test_partial_run_can_be_reported_as_incomplete_and_restarted(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path)
+    workspace = make_workspace(tmp_path)
     started = threading.Event()
     release = threading.Event()
 
@@ -376,7 +366,7 @@ def test_partial_run_can_be_reported_as_incomplete_and_restarted(tmp_path: Path)
     model = BlockingModel()
     service = make_service(lambda: model, lambda root, image: QuietRuntime(root, image))
     control = RunControl()
-    thread, outcome = run_in_thread(service, workspace, oracle, tmp_path, control)
+    thread, outcome = run_in_thread(service, workspace, tmp_path, control)
     assert started.wait(3)
     run_dirs = list((tmp_path / "runs").iterdir())
     assert len(run_dirs) == 1
@@ -396,10 +386,10 @@ def test_partial_run_can_be_reported_as_incomplete_and_restarted(tmp_path: Path)
 
 
 def test_report_marks_and_skips_an_incomplete_trailing_event(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path)
+    workspace = make_workspace(tmp_path)
     model = FakeModelSession(())
     service = make_service(lambda: model, lambda root, image: QuietRuntime(root, image))
-    result = service.run(workspace, oracle, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
+    result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
     with (Path(result.run_dir) / "events.jsonl").open("ab") as stream:
         stream.write(b'{"seq":')
 
@@ -410,7 +400,7 @@ def test_report_marks_and_skips_an_incomplete_trailing_event(tmp_path: Path) -> 
 
 
 def test_interactive_session_round_trip_persists_transcript_and_closes(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path)
+    workspace = make_workspace(tmp_path)
 
     class FakeInteractiveRuntime(QuietRuntime):
         def __init__(self, challenge_root: Path, image: str) -> None:
@@ -461,6 +451,7 @@ def test_interactive_session_round_trip_persists_transcript_and_closes(tmp_path:
             self.observed_output = json.loads(read.content)["output"]
             on_tool_call(ToolCall("session_close", {"session_id": session_id}))
             on_tool_call(ToolCall("candidate_submit", {"candidate": CANDIDATE}))
+            on_tool_call(ToolCall("run_complete", {"outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Retain candidate", "unresolved": []}))
             return TurnResult(text="", tool_calls=4)
 
         def close(self) -> None:
@@ -470,11 +461,11 @@ def test_interactive_session_round_trip_persists_transcript_and_closes(tmp_path:
     runtime = FakeInteractiveRuntime(workspace / "input", IMAGE)
     service = make_service(lambda: model, lambda *_: runtime)
     result = service.run(
-        workspace, oracle, IMAGE, tmp_path / "runs",
+        workspace, IMAGE, tmp_path / "runs",
         RunLimits(max_turns=3, max_tool_calls=8),
     )
 
-    assert result.verified is True
+    assert result.status == "candidate_unverified"
     assert "ready> echo:answer" in model.observed_output
     assert model.closed is True
     assert runtime.closed is True
@@ -622,7 +613,7 @@ def test_docker_runtime_pty_supports_a_real_interactive_child(tmp_path: Path) ->
 
 
 def test_stop_during_interactive_read_closes_session_and_keeps_transcript(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path)
+    workspace = make_workspace(tmp_path)
     read_started = threading.Event()
     release_read = threading.Event()
 
@@ -686,7 +677,7 @@ def test_stop_during_interactive_read_closes_session_and_keeps_transcript(tmp_pa
     def run() -> None:
         try:
             outcome["result"] = service.run(
-                workspace, oracle, IMAGE, tmp_path / "runs",
+                workspace, IMAGE, tmp_path / "runs",
                 RunLimits(max_turns=2, max_tool_calls=4),
                 control=control,
             )
@@ -712,10 +703,10 @@ def test_stop_during_interactive_read_closes_session_and_keeps_transcript(tmp_pa
     assert transcript[-1]["state"] == "cancelled"
 
 
-def test_teardown_failure_after_verification_keeps_one_verified_terminal_result(tmp_path: Path) -> None:
-    workspace, oracle = make_workspace(tmp_path)
+def test_teardown_failure_after_completion_keeps_one_terminal_result(tmp_path: Path) -> None:
+    workspace = make_workspace(tmp_path)
     control = RunControl()
-    model = FakeModelSession((ScriptedTurn(tool_calls=(ToolCall("candidate_submit", {"candidate": CANDIDATE}),)),))
+    model = FakeModelSession((ScriptedTurn(tool_calls=(ToolCall("candidate_submit", {"candidate": CANDIDATE}), ToolCall("run_complete", {"outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Retain candidate", "unresolved": []}),)),))
 
     class TeardownFailureRuntime(QuietRuntime):
         def __exit__(self, *_: object) -> None:
@@ -729,16 +720,15 @@ def test_teardown_failure_after_verification_keeps_one_verified_terminal_result(
     service = make_service(lambda: model, lambda *_: runtime)
 
     result = service.run(
-        workspace, oracle, IMAGE, tmp_path / "runs", RunLimits(max_turns=1), control=control
+        workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1), control=control
     )
 
     events = [json.loads(line) for line in (Path(result.run_dir) / "events.jsonl").read_text().splitlines()]
     terminal_events = [event for event in events if event["event_type"] == "run_finished"]
     state = json.loads((Path(result.run_dir) / "run-state.json").read_text(encoding="utf-8"))
-    assert result.status == "verified"
-    assert result.verified is True
+    assert result.status == "candidate_unverified"
     assert len(terminal_events) == 1
-    assert terminal_events[0]["status"] == "verified"
+    assert terminal_events[0]["status"] == "candidate_unverified"
     assert any(event["event_type"] == "run_cleanup_error" for event in events)
     assert state["state"] == "completed"
     assert state["cleanup_status"] == "recovered"

@@ -60,7 +60,7 @@ class Provider:
         script = ("import base64,json,pathlib\n"
                   f"data=pathlib.Path('/challenge/{self.filename}').read_bytes()\n"
                   f"print({expressions[self.mode]},flush=True)\n")
-        saved = call('script_save',path='solve.py',source=script)
+        call('script_save',path='solve.py',source=script)
         execution = call('script_run',path='solve.py',argv=[])
         value = execution['stdout'].strip()
         assert value.startswith('flag{')
@@ -78,7 +78,7 @@ class Provider:
                      observation_ids=[source['observation']['id']],experiment_ids=[experiment['experiment_id']],unknowns=['copy conflict'])
         assert claim['state']=='hypothesis'
         candidate = call('candidate_submit',candidate=value,observation_ids=[execution['observation']['id']],
-                         derivation='Derived by the saved input-reading script',unchecked_reason='No trusted oracle provided')
+                         derivation='Derived by the saved input-reading script',unchecked_reason='Await competition confirmation')
         checked = call('candidate_check',candidate_id=candidate['candidate_id'],operation=operation,path=self.filename,selector=selector)
         assert checked['passed'] and not checked['verified']
         call('run_complete',outcome='candidate_unverified',candidate_id=candidate['candidate_id'],
@@ -116,11 +116,10 @@ def main():
         workspace=import_single_file(original,output/'imports',authorize_model_data=True)
         service=LocalChallengeService(model_factory=lambda m=mode,f=filename,d=data:Provider(m,f,d,args.exercise_unlimited),
             model_metadata={'provider':'authored-deterministic'},runtime_factory=factory)
-        result=service.run(workspace,None,choice.image,output/'runs',RunLimits(max_turns=2,wall_time_seconds=120))
+        result=service.run(workspace,choice.image,output/'runs',RunLimits(max_turns=2,wall_time_seconds=120))
         if args.exercise_unlimited and mode == 'crypto':
             assert result.tool_calls > 60
         assert result.status == ('unsolved' if mode=='unsolved' else 'candidate_unverified'),result
-        assert not result.verified
         run=Path(result.run_dir)
         audit=audit_run(run)
         report=generate_basic_report(run)

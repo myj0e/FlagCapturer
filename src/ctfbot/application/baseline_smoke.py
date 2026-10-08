@@ -22,7 +22,7 @@ class _SyntheticRuntime:
 
 
 def run_synthetic_smoke() -> tuple[bool, str]:
-    """Exercise tool dispatch, traversal denial, evidence, and exact verification offline."""
+    """Exercise tool dispatch, traversal denial, evidence, and candidate recording and explicit completion offline."""
     expected = "CTFBOT_SYNTHETIC{phase_a_acceptance}"
     with tempfile.TemporaryDirectory(prefix="ctfbot-stage-a-smoke-") as temp:
         root = Path(temp)
@@ -43,15 +43,7 @@ def run_synthetic_smoke() -> tuple[bool, str]:
         task = "# Challenge task\n\nRecover the synthetic test candidate.\n"
         (challenge / "TASK.md").write_text(task, encoding="utf-8")
         os.chmod(challenge / "TASK.md", 0o444)
-        oracle = private / "oracle.json"
         metadata_hash = hashlib.sha256(b"synthetic-metadata").hexdigest()
-        oracle.write_text(json.dumps({
-            "challenge_id": "synthetic-stage-a",
-            "source_commit": "synthetic-commit",
-            "challenge_metadata_sha256": metadata_hash,
-            "flag": expected,
-        }), encoding="utf-8")
-        os.chmod(oracle, 0o600)
         provenance = {
             "challenge_id": "synthetic-stage-a",
             "source_commit": "synthetic-commit",
@@ -69,16 +61,20 @@ def run_synthetic_smoke() -> tuple[bool, str]:
         }
         (challenge / "provenance.json").write_text(json.dumps(provenance), encoding="utf-8")
         os.chmod(challenge / "provenance.json", 0o444)
-        validate_baseline_snapshot(challenge, oracle, run_root)
+        validate_baseline_snapshot(challenge)
         evidence = EvidenceStore(run_root / "synthetic-run")
         model = FakeModelSession((
             ScriptedTurn(tool_calls=(ToolCall("challenge_list", {"path": "."}),)),
             ScriptedTurn(tool_calls=(ToolCall("challenge_read_text", {"path": "input/input.txt"}),)),
-            ScriptedTurn(tool_calls=(ToolCall("challenge_read_text", {"path": "../private/oracle.json"}),)),
+            ScriptedTurn(tool_calls=(ToolCall("challenge_read_text", {"path": "../private/secret.txt"}),)),
             ScriptedTurn(tool_calls=(ToolCall("command_run", {"argv": ["synthetic", "check"]}),)),
-            ScriptedTurn(tool_calls=(ToolCall("candidate_submit", {"candidate": expected}),)),
+            ScriptedTurn(tool_calls=(
+                ToolCall("candidate_submit", {"candidate": expected}),
+                ToolCall("run_complete", {"outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Synthetic candidate recorded", "unresolved": ["competition confirmation"]}),
+                ToolCall("command_run", {"argv": ["must-not-run"]}),
+            )),
         ))
-        registry = ToolRegistry(challenge, work, evidence, _SyntheticRuntime(), oracle)
+        registry = ToolRegistry(challenge, work, evidence, _SyntheticRuntime())
         result = AgentLoop(
             model,
             registry,
@@ -88,4 +84,4 @@ def run_synthetic_smoke() -> tuple[bool, str]:
         ).run(task)
         records = [json.loads(line) for line in (run_root / "synthetic-run" / "events.jsonl").read_text().splitlines()]
         denied = any(event.get("event_type") == "tool_result" and event.get("result", {}).get("status") == "policy_denied" for event in records)
-        return result.verified and result.status == "verified" and denied, "temporary synthetic evidence was checked and cleaned up"
+        return result.status == "candidate_unverified" and result.candidate_ids == ("candidate-1",) and denied and any(event.get("result", {}).get("status") == "already_completed" for event in records), "temporary synthetic evidence was checked and cleaned up"

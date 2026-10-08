@@ -79,7 +79,6 @@ class LocalChallengeService:
     def preview(
         self,
         workspace: Path,
-        oracle_path: Path | None,
         runtime_image: str,
         runs_root: Path,
         limits: RunLimits = RunLimits(),
@@ -87,9 +86,7 @@ class LocalChallengeService:
     ) -> ChallengePreview:
         """Validate and describe a private imported snapshot without starting dependencies."""
         validate_image_reference(runtime_image)
-        resolved_workspace, _oracle, provenance, _task = validate_baseline_snapshot(
-            workspace, oracle_path, runs_root
-        )
+        resolved_workspace, provenance, _task = validate_baseline_snapshot(workspace)
         raw_inputs = provenance["input_files"]
         inputs = tuple(
             ChallengeInputPreview(
@@ -141,7 +138,7 @@ class LocalChallengeService:
             inputs=inputs,
             model_data_authorized=provenance.get("model_data_authorized") is True and basis is not None,
             authorization_basis=basis,
-            verifier="exact-string controller-only" if oracle_path is not None else "model-selected candidate; correctness unverified",
+            verifier="model-selected candidate; correctness unverified",
             runtime_profile=("candidate controller TCP connector; offline solver; pinned IP and bounded authorization window"
                              if remote else "local service candidate; isolated IPv4 bridge; no external DNS or published ports"
                              if spec else "offline Docker; read-only input; bounded tmpfs workdir"),
@@ -156,7 +153,6 @@ class LocalChallengeService:
     def run(
         self,
         workspace: Path,
-        oracle_path: Path | None,
         runtime_image: str,
         runs_root: Path,
         limits: RunLimits = RunLimits(),
@@ -165,13 +161,12 @@ class LocalChallengeService:
         event_sink: Callable[[dict[str, Any]], None] | None = None,
         additional_prompt: str = "",
     ) -> RunResult:
-        preview = self.preview(workspace, oracle_path, runtime_image, runs_root, limits, additional_prompt=additional_prompt)
+        preview = self.preview(workspace, runtime_image, runs_root, limits, additional_prompt=additional_prompt)
         if not preview.start_allowed:
             raise BaselineAdmissionError(preview.start_block_reason or
                                          "challenge attachment transmission to a model has not been authorized")
         return run_baseline(
             workspace=Path(preview.workspace),
-            oracle_path=oracle_path,
             runtime_image=runtime_image,
             runs_root=runs_root,
             model_factory=self.model_factory,

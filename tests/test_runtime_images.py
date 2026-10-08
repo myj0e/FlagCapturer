@@ -84,8 +84,7 @@ def test_tui_missing_image_can_retry_without_retyping_id():
             await pilot.pause(.15)
             assert "Prepare local runtime" in tui.status_text
             tui.query_one("#workspace-path", Input).value = "/workspace"
-            tui.query_one("#oracle-path", Input).value = "/private/oracle.json"
-            assert tui._input_paths()[2] == IMAGE
+            assert tui._input_paths()[1] == IMAGE
             assert tui.query_one("#runtime-image", Input).value == IMAGE
     asyncio.run(scenario())
 
@@ -103,14 +102,13 @@ def test_explicit_image_skips_automatic_lookup():
 def test_retry_during_preview_does_not_expire_the_new_preview(tmp_path):
     from test_stage_b_tui import make_workspace
     from textual.widgets import Button
-    workspace, oracle = make_workspace(tmp_path)
+    workspace = make_workspace(tmp_path)
     choices = iter([RuntimeImageChoice(message="Prepare runtime"), RuntimeImageChoice(IMAGE, "ready")])
     async def scenario():
         tui = app(lambda: next(choices), runs_root=tmp_path / "runs")
         async with tui.run_test(size=(120, 40)) as pilot:
             await pilot.pause(.15)
             tui.query_one("#workspace-path", Input).value = str(workspace)
-            tui.query_one("#oracle-path", Input).value = str(oracle)
             await pilot.click("#preview")
             await pilot.pause(.15)
             assert tui._preview is not None

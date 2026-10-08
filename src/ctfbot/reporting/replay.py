@@ -75,7 +75,7 @@ def audit_run(run_dir: Path) -> dict[str, Any]:
             "claim": "artifact integrity and event ordering only; evidence is not digitally signed"}
 
 
-def replay_run(*, run_dir: Path, workspace: Path, oracle: Path | None = None, output: Path,
+def replay_run(*, run_dir: Path, workspace: Path, output: Path,
                maximum_commands: int = 60, wall_seconds: float = 300,
                runtime_factory: Callable[[Path, str], Any] | None = None) -> Path:
     if not 1 <= maximum_commands <= 60 or not 0 < wall_seconds <= 1800:
@@ -85,7 +85,7 @@ def replay_run(*, run_dir: Path, workspace: Path, oracle: Path | None = None, ou
     metadata = read_private(root / "run.json")
     if metadata.get("import_mode") not in {"static_files_only", "offline_artifact_only"}:
         raise PermissionError("this replay increment accepts offline runs only; no remote/service scope is inferred")
-    admitted, _, _, _ = validate_baseline_snapshot(workspace, oracle, output)
+    admitted, _, _ = validate_baseline_snapshot(workspace)
     if (str(admitted) != metadata.get("workspace_path")
             or hashlib.sha256((admitted / "provenance.json").read_bytes()).hexdigest() != metadata.get("provenance_sha256")):
         raise ValueError("replay workspace differs from the original admitted snapshot")
@@ -95,7 +95,7 @@ def replay_run(*, run_dir: Path, workspace: Path, oracle: Path | None = None, ou
     commands = [event for event in events if event.get("event_type") == "command_execution"]
     if not commands or len(commands) > maximum_commands:
         raise ValueError("recorded command checkpoints are empty or exceed replay allocation")
-    # Validate all argv before starting Docker. No model or oracle contents are used.
+    # Validate all argv before starting Docker. No model is used.
     decoded = []
     for event in commands:
         argv = json.loads(_artifact(root, event["argv"]))

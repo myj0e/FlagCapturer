@@ -1,4 +1,4 @@
-"""Actual TUI/Docker synthetic acceptance without a known-answer oracle or LLM."""
+"""Actual TUI/Docker synthetic acceptance without known answers or an LLM."""
 from __future__ import annotations
 
 import argparse
@@ -30,8 +30,6 @@ async def verify(output: Path, single_file: bool = False):
     category='reverse' if single_file else 'crypto'
     case=next(case for case in load_dataset(dataset)['cases'] if case['category']==category)
     # Remove the unused answer and turn this snapshot into an exploration case.
-    # The dataset manifest is not used for evaluation after removing its oracle.
-    case['oracle'].unlink()
     identity=daemon_identity()
     runtimes=[]
     def factory(root,image):
@@ -50,7 +48,6 @@ async def verify(output: Path, single_file: bool = False):
             await pilot.pause(.1)
             if app.query_one('#runtime-image',Input).value: break
         assert app.query_one('#runtime-image',Input).value==choice.image
-        assert not app.query_one('#oracle-path',Input).value
         await pilot.click('#preview')
         await pilot.pause(.1)
         assert app._preview and app._preview.start_allowed,app.status_text
@@ -60,7 +57,7 @@ async def verify(output: Path, single_file: bool = False):
             await pilot.pause(.1)
             if app.last_result: break
         result=app.last_result
-        assert result and result.status=='candidate_unverified' and not result.verified,app.status_text
+        assert result and result.status=='candidate_unverified',app.status_text
         assert any('CTFBOT_SYNTHETIC{' in line for line in app.displayed_events)
         await pilot.click('#report')
         await pilot.pause(.1)
@@ -74,8 +71,8 @@ async def verify(output: Path, single_file: bool = False):
     receipt=output/'acceptance.json'
     write_private(receipt,dict(status='passed',runtime_image=choice.image,automatic_image=True,
                                single_file=single_file,workspace=str(prepared_workspace),
-                               oracle_provided=False,additional_prompt='Flag 前缀为 CTFBOT_SYNTHETIC',
-                               result_status=result.status,verified=result.verified,run_dir=str(run),
+                               additional_prompt='Flag 前缀为 CTFBOT_SYNTHETIC',
+                               result_status=result.status,run_dir=str(run),
                                audit=audit_run(run),replay=str(replay),resources_removed=True,real_model_used=False))
     print(receipt)
 
