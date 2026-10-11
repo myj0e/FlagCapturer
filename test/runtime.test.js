@@ -134,3 +134,13 @@ test('concurrent intentional session closure terminates once and preserves obser
   assert.equal(kills, 1);
   assert.ok(results.every(result => result.state === 'closed' && result.exit_code === 137));
 });
+
+test('artifact export supports declared multi-megabyte limit and rejects malformed base64', async t => {
+  const data = await fixture(t);
+  const bytes = Buffer.alloc(2 * 1024 * 1024, 0x61);
+  const runtime = new DockerRuntime({ input: data.workspace.input, image: IMAGE, runId: 'fixture' });
+  runtime.execute = async () => ({ code: 0, stdout: Buffer.from(bytes.toString('base64')), stderr: Buffer.alloc(0) });
+  assert.deepEqual(await runtime.export('/work/large', undefined, { maxBytes: bytes.length }), bytes);
+  runtime.execute = async () => ({ code: 0, stdout: Buffer.from('a==='), stderr: Buffer.alloc(0) });
+  await assert.rejects(runtime.export('/work/large'), /base64/);
+});

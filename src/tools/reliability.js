@@ -129,7 +129,7 @@ print(json.dumps({'passed':passed}))`;
     next_action: s.text(2048), blocker_kind: s.enum(blockerKinds), retry_reason: s.text(1024, { minLength: 1 })
   }, ['execution_observation_id', 'observation_ids', 'parameters', 'bindings', 'transformations', 'purpose', 'reported_result']), async args => {
     const execution = state.select('observations', [args.execution_observation_id])[0];
-    invariant(['command_run', 'script_run', 'script_start', 'session_start', 'session_read', 'session_send', 'workflow_run'].includes(execution.tool), 'Execution observation required');
+    invariant(['command_run', 'script_run', 'script_start', 'session_start', 'session_read', 'session_send', 'workflow_run', 'tool_exec'].includes(execution.tool), 'Execution observation required');
     state.select('observations', args.observation_ids);
     state.select('claims', args.hypothesis_ids);
     const method = args.method_id ? registry.knowledge?.get(args.method_id) : null;

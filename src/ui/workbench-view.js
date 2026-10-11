@@ -74,7 +74,7 @@ export class WorkbenchView {
         return index === 0 ? wrapped.map(part => entry.kind === '工具失败' ? `\x1b[31m${part}\x1b[0m` : cyan(part)) : wrapped.map(muted);
       }), ''];
     }
-    if (entry.kind === 'Agent') return [cyan(fit('◉ 模型说明（公开）', width)), ...wrap(entry.text, Math.max(1, width - 2)).map(line => width > 2 ? '  ' + line : line), ''];
+    if (['Agent', '思考'].includes(entry.kind)) return [(entry.kind === '思考' ? muted : cyan)(fit(entry.kind === '思考' ? '◌ 模型思考（服务返回）' : '◉ 模型说明（公开）', width)), ...wrap(entry.text, Math.max(1, width - 2)).map(line => width > 2 ? '  ' + line : line), ''];
     return [...wrap(`[${entry.kind}] ${entry.text}`, width), ''];
   }
   trim() {

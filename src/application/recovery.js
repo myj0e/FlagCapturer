@@ -4,7 +4,8 @@ import { join } from 'node:path';
 export async function recover(root, runner = runProcess) {
   const path = await confined(root, 'recovery.json');
   const receipt = JSON.parse((await readRegular(path, 65536)).toString());
-  const names = [receipt.container, ...(receipt.service_container ? [receipt.service_container] : [])];
+  invariant(receipt.tool_containers === undefined || Array.isArray(receipt.tool_containers) && receipt.tool_containers.length <= 64, 'Invalid tool container receipt');
+  const names = [...new Set([receipt.container, ...(receipt.service_container ? [receipt.service_container] : []), ...(receipt.tool_containers ?? [])])];
   invariant(receipt.schema_version === 1 && names.every(name => /^ctfbot-[a-f0-9-]{36}$/.test(name)) && /^[a-f0-9-]{36}$/.test(receipt.run_id), 'Invalid recovery receipt');
   if (!receipt.pending) return {
     recovered: true,

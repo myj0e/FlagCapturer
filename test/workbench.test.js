@@ -155,7 +155,7 @@ test('workbench gates runs and supports steering, thinking changes and awaited S
   app.poll();
   assert.equal(v.state.context, undefined);
 });
-test('workbench public transcript excludes thinking and authentication data', () => {
+test('workbench displays provider thinking separately and excludes opaque signatures', () => {
   const {
       view: v
     } = view(),
@@ -176,14 +176,16 @@ test('workbench public transcript excludes thinking and authentication data', ()
       role: 'assistant',
       content: [{
         type: 'thinking',
-        thinking: 'private reasoning'
+        thinking: 'private reasoning', thinkingSignature: 'OPAQUE_SIGNATURE'
       }, {
         type: 'text',
         text: 'public progress'
       }]
     }
   });
-  assert.ok(!JSON.stringify(v.entries).includes('private reasoning'));
+  assert.equal(v.entries.filter(x => x.kind === '思考').length, 1);
+  assert.ok(JSON.stringify(v.entries).includes('private reasoning'));
+  assert.ok(!JSON.stringify(v.entries).includes('OPAQUE_SIGNATURE'));
   assert.ok(JSON.stringify(v.entries).includes('public progress'));
 });
 async function until(predicate) {

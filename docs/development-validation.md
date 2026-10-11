@@ -73,3 +73,7 @@ npm run check
 补全界面为原生 Editor 预留空间，窄屏和多行时优先保留输入光标与选中项。六项新增测试覆盖命令集合、动态参数、Tab 强制补全语义、取消、中文及空格路径、目录引号光标位置、@ 引用、不读取文件内容、控制字符过滤、实际 Pi Editor 的 Tab/方向键/Esc、窗口缩放和参数落地。普通测试 80 项通过，51 个模块检查通过。真实 PTY 手动确认 `/thi` 候选与 `/import ./sr` → Tab → `/import ./src/`；没有提交导入、登录或模型请求，没有改变已有模型选择。日志为 reports/autocomplete-unit.tap 与 autocomplete-check.log。
 
 补全接入后的完整集成测试 13 项通过、0 失败、0 跳过，覆盖原生 OAuth、工作台 Pi/Docker 解题及 TCP 生命周期。日志为 reports/autocomplete-integration.tap。
+
+## 2026-10-11 最终验收
+
+工具按需供应、思考展示及全局细节修改后，统一执行一次完整验收：122 项单元测试、20 项集成测试、76 个模块检查全部通过。新增测试仅下载 5621 字节的锁定 Base58 wheel，未构建、拉取或更换镜像，未使用收费模型。记录见 [project-review-20261011.md](project-review-20261011.md)，日志保存在 `reports/final-acceptance-20261011/`。

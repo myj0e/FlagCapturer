@@ -5,9 +5,16 @@ export class RunState {
     this.identity = identity;
     this.revision = 0;
     this.completion = null;
-    this.sections = Object.fromEntries(['observations', 'candidates', 'checks', 'claims', 'experiments', 'summaries', 'scripts', 'checkpoints', 'sources', 'assets', 'context_snapshots'].map(name => [name, new Map()]));
+    this.recordQueue = Promise.resolve();
+    this.sections = Object.fromEntries(['observations', 'candidates', 'checks', 'claims', 'experiments', 'summaries', 'scripts', 'checkpoints', 'sources', 'assets', 'context_snapshots', 'tool_environments'].map(name => [name, new Map()]));
   }
-  async add(section, value) {
+  add(section, value) {
+    // Background tool preparation and foreground tools can persist simultaneously.
+    const pending = this.recordQueue.then(() => this.appendRecord(section, value));
+    this.recordQueue = pending.catch(() => {});
+    return pending;
+  }
+  async appendRecord(section, value) {
     const records = this.sections[section];
     invariant(records, 'Unknown state section');
     const id = `${section}-${records.size + 1}`;

@@ -1,3 +1,4 @@
+import { assistantBlocks, assistantDelta } from './assistant-output.js';
 import { basename, resolve, join } from 'node:path';
 import { access, stat } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -9,7 +10,7 @@ import { importFile, preview } from '../challenge/workspace.js';
 import { report } from '../application/report.js';
 import { readRegular, invariant } from '../util.js';
 import { summaryDocument } from './solving-summary.js';
-import { ToolActivity, toolCardText } from './activity.js';
+import { ToolActivity, toolCardText, provisioningText } from './activity.js';
 import { WorkbenchView, clean } from './workbench-view.js';
 import { openBrowser } from './browser.js';
 import { createWorkbenchAutocomplete, findFd, pathArgument } from './autocomplete.js';
@@ -497,7 +498,7 @@ export class Workbench {
     const started = Date.now();
     this.controller = controller;
     this.controls = null;
-    this.activeAssistant = null;
+    this.assistantEntries = new Map();
     Object.assign(this.view.state, {
       status: '准备运行',
       busy: true,
@@ -576,20 +577,33 @@ export class Workbench {
       this.view.state.runDir = event.run_dir;
       this.view.state.status = '解题中';
       this.view.log('运行', `开始解题 · ${event.run_id ?? ''}\n证据：${event.run_dir}`);
+    } else if (event.type === 'tool_provisioning') {
+      this.view.log('工具准备', provisioningText(event));
     } else if (event.type === 'context_refresh_start') {
       this.view.state.currentActivity = { id: 'context-refresh', purpose: '整理当前状态与核心参考' };
     } else if (event.type === 'context_refresh_end') {
       if (this.view.state.currentActivity?.id === 'context-refresh') this.view.state.currentActivity = null;
       if (event.errorMessage) this.view.log('上下文', event.errorMessage);
-    } else if (event.type === 'message_update' && event.assistantMessageEvent?.type === 'text_delta') {
-      this.activeAssistant ??= this.view.log('Agent', '');
-      this.activeAssistant.text = (this.activeAssistant.text + clean(event.assistantMessageEvent.delta)).slice(0, 32768);
+    } else if (event.type === 'message_start' && event.message?.role === 'assistant') {
+      this.assistantEntries = new Map();
+    } else if (assistantDelta(event)) {
+      const delta = assistantDelta(event);
+      this.assistantEntries ??= new Map();
+      let entry = this.assistantEntries.get(delta.index);
+      if (!entry || !this.view.entries.includes(entry)) {
+        entry = this.view.log(delta.kind, '');
+        this.assistantEntries.set(delta.index, entry);
+      }
+      entry.text = (entry.text + clean(delta.text)).slice(-32768);
     } else if (event.type === 'message_end' && event.message?.role === 'assistant') {
-      const text = event.message.content.filter(x => x.type === 'text').map(x => x.text).join('\n');
-      if (text && !this.activeAssistant) this.view.log('Agent', text);
-      this.activeAssistant = null;
+      for (const block of assistantBlocks(event.message)) {
+        const entry = this.assistantEntries?.get(block.index) ?? this.assistantEntries?.get(block.kind);
+        if (entry && this.view.entries.includes(entry)) entry.text = clean(block.text).slice(-32768);
+        else this.view.log(block.kind, block.text);
+      }
+      this.assistantEntries = new Map();
     } else if (event.type === 'tool_execution_start') {
-      this.activeAssistant = null;
+      this.assistantEntries = new Map();
       this.view.state.tools++;
       const activity = this.toolActivity.start(event);
       this.view.state.currentActivity = { id: event.toolCallId, purpose: activity.purpose };

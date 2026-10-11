@@ -83,7 +83,8 @@ test('CLI separates public explanation, command calls and results with stable ID
   assert.match(text, /file \/challenge\/test/);
   assert.match(text, /stdout：PNG image data/);
   assert.match(text, /0.15s/);
-  assert.ok(!text.includes('PRIVATE'));
+  assert.equal(text.split('PRIVATE').length - 1, 1);
+  assert.match(text, /模型思考（服务返回）/);
   assert.match(text, /先检查文件格式。\n\n┌─/);
 });
 

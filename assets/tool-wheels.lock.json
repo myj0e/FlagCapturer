@@ -1,0 +1,30 @@
+{
+  "construct": {
+    "version": "2.10.70",
+    "filename": "construct-2.10.70-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/b2/fb/08b3f4bf05da99aba8ffea52a558758def16e8516bc75ca94ff73587e7d3/construct-2.10.70-py3-none-any.whl",
+    "bytes": 63020,
+    "sha256": "c80be81ef595a1a821ec69dc16099550ed22197615f4320b57cc9ce2a672cb30"
+  },
+  "dpkt": {
+    "version": "1.9.8",
+    "filename": "dpkt-1.9.8-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/11/79/479e2194c9096b92aecdf33634ae948d2be306c6011673e98ee1917f32c2/dpkt-1.9.8-py3-none-any.whl",
+    "bytes": 194973,
+    "sha256": "4da4d111d7bf67575b571f5c678c71bddd2d8a01a3d57d489faf0a92c748fbfd"
+  },
+  "pefile": {
+    "version": "2024.8.26",
+    "filename": "pefile-2024.8.26-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/54/16/12b82f791c7f50ddec566873d5bdd245baa1491bac11d15ffb98aecc8f8b/pefile-2024.8.26-py3-none-any.whl",
+    "bytes": 74766,
+    "sha256": "76f8b485dcd3b1bb8166f1128d395fa3d87af26360c2358fb75b80019b957c6f"
+  },
+  "base58": {
+    "version": "2.1.1",
+    "filename": "base58-2.1.1-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/4a/45/ec96b29162a402fc4c1c5512d114d7b3787b9d1c2ec241d9568b4816ee23/base58-2.1.1-py3-none-any.whl",
+    "bytes": 5621,
+    "sha256": "11a36f4d3ce51dfc1043f3218591ac4eb1ceb172919cebe05b52a5bcc8d245c2"
+  }
+}

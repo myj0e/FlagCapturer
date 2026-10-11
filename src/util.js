@@ -66,8 +66,10 @@ export async function atomicWrite(path, data) {
   });
   await rename(temporary, path);
 }
-export function base64(value) {
-  invariant(typeof value === 'string' && value.length <= 2 * 1024 * 1024 && /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value), 'Invalid base64');
+export function base64(value, maxEncodedLength = 2 * 1024 * 1024) {
+  invariant(typeof value === 'string' && value.length <= maxEncodedLength && value.length % 4 === 0 && !/[^A-Za-z0-9+/=]/.test(value), 'Invalid base64');
+  const padding = value.indexOf('=');
+  invariant(padding < 0 || padding >= value.length - 2 && /^={1,2}$/.test(value.slice(padding)), 'Invalid base64 padding');
   return Buffer.from(value, 'base64');
 }
 export function safeTerminal(value) {

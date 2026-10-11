@@ -12,6 +12,7 @@ export function logPreview(value, limit = 900, lines = 6) {
   return selected.length > limit || text.split('\n').length > lines ? selected.slice(0, limit) + '\n…（已省略，完整内容见运行证据）' : selected;
 }
 const purposes = {
+  tool_request: '检查或准备所需工具', tool_status: '查看工具准备状态', tool_exec: '在已验证环境中执行分析',
   challenge_list: '查看题目附件清单', challenge_read_text: '读取附件文本', challenge_read_bytes: '查看附件的指定字节',
   artifact_read: '读取已保存证据的指定范围', artifact_tail: '查看证据末尾', artifact_find: '在证据中查找文本', artifact_export: '保存工作文件和来源记录',
   asset_read: '查看已校验产物', asset_capture: '保存脚本产物并关联来源',
@@ -54,7 +55,7 @@ export function describeTool(name, args = {}) {
     details.push({ label: '脚本', text: `${args.language ?? 'unknown'} · ${String(args.source ?? '').length} 字符` });
     details.push({ label: '代码预览', text: logPreview(args.source, 700, 6) });
   }
-  const fields = ['pack', 'operation', 'method_id', 'id', 'path', 'asset_id', 'asset_ids', 'parent_asset_ids', 'script_id', 'session_id', 'section', 'offset', 'length', 'encoding', 'query', 'literal', 'collect_seconds', 'selector', 'candidate_id', 'subtask', 'host', 'port', 'method', 'crop', 'parameters', 'positions', 'retry_reason'];
+  const fields = ['capabilities', 'preparation_id', 'environment_id', 'inputs', 'outputs', 'pack', 'operation', 'method_id', 'id', 'path', 'asset_id', 'asset_ids', 'parent_asset_ids', 'script_id', 'session_id', 'section', 'offset', 'length', 'encoding', 'query', 'literal', 'collect_seconds', 'selector', 'candidate_id', 'subtask', 'host', 'port', 'method', 'crop', 'parameters', 'positions', 'retry_reason'];
   const values = fields.filter(key => args[key] !== undefined).map(key => `${key}=${typeof args[key] === 'object' ? JSON.stringify(args[key]) : args[key]}`);
   if (values.length) details.push({ label: '参数', text: logPreview(values.join(' · '), 850, 3) });
   for (const key of ['purpose', 'statement', 'goal', 'expected_observation', 'next_action', 'transformation']) if (args[key]) details.push({ label: ({ purpose: '实验目的', statement: '假设', goal: '目标', expected_observation: '预期现象', next_action: '下一步', transformation: '转换说明' })[key], text: logPreview(args[key], 350, 2) });
@@ -101,12 +102,14 @@ function summarizePayload(name, reply, isError = false) {
   if (p.inventory) add('附件', p.inventory.slice(0, 6).map(x => `${x.path} · ${x.bytes} 字节`).join('\n'));
   if (p.records) add('记录', p.records.length ? p.records.slice(0, 5).map(x => `${x.id ?? ''} · ${x.title ?? x.statement ?? x.path ?? x.purpose ?? x.origin ?? ''}`).join('\n') : '无记录');
   if (p.counts) add('状态', Object.entries(p.counts).map(([key, count]) => `${key} ${count}`).join(' · '));
-  if (p.capabilities) {
+  if (p.capabilities && !Array.isArray(p.capabilities)) {
     const missing = p.unmet_required;
     add('能力', missing?.binaries?.length || missing?.modules?.length ? `缺少必需项：${[...missing.binaries, ...missing.modules].join(', ')}` : '所检查的必需项可用；兼容性仍需结合版本确认');
     add('工具路径', Object.entries(p.capabilities.binaries ?? {}).slice(0, 5).map(([key, value]) => `${key}: ${value.path ?? '未找到'}`).join('\n'));
     add('模块', Object.entries(p.capabilities.modules ?? {}).map(([key, value]) => `${key}: ${value.importable ? value.version ?? '可导入，版本未知' : '不可导入'}`).join('\n'));
   }
+  if (p.preparation_id) add('工具环境', `${p.preparation_id} · ${provisioningState(p.state)}${p.cache_hit ? ' · 缓存命中' : ''}${p.environment_id ? '\n' + p.environment_id : ''}`);
+  if (p.catalog) add('可申请能力', p.catalog.map(x => `${x.id} · ${x.title}`).join('\n'), 1000, 12);
   const r = p.result;
   if (r && typeof r === 'object') {
     if (r.signatures) add('格式线索', r.signatures.length ? r.signatures.slice(0, 6).map(x => `${x.format} @ ${x.offset}`).join(' · ') : '未发现已知签名（仅限本次检查）');
@@ -155,6 +158,13 @@ export function summarizeTool(name, reply, isError = false) {
     return { status: isError ? '执行失败' : '已返回（摘要不可用）', isError: Boolean(isError),
       details: [{ label: '说明', text: '返回格式无法生成摘要；请查看运行证据中的完整结果' }] };
   }
+}
+
+export function provisioningState(state) {
+  return ({ queued: '等待准备', checking: '检查已有工具', downloading: '下载已锁定的小型依赖', installing: '离线安装依赖', verifying: '验证工具组合', ready: '已可使用', failed: '准备失败', cancelled: '已取消' })[state] ?? state;
+}
+export function provisioningText(event) {
+  return `${(event.capabilities ?? []).join('、')} · ${provisioningState(event.state)}${event.cache_hit ? ' · 缓存命中' : ''}${event.error ? '\n' + event.error.message : ''}`;
 }
 
 export class ToolActivity {

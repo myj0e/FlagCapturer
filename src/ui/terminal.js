@@ -1,30 +1,36 @@
+import { assistantBlocks, assistantDelta } from './assistant-output.js';
 import { createInterface } from 'node:readline';
 import { safeTerminal } from '../util.js';
-import { ToolActivity, toolCardText, logPreview } from './activity.js';
+import { ToolActivity, toolCardText, logPreview, provisioningText } from './activity.js';
 export function terminalObserver(output = process.stdout) {
   const tools = new ToolActivity();
-  let streamed = false, textOpen = false;
+  let streamed = new Set(), textOpen = false, currentKind;
   const closeText = () => { if (textOpen) output.write('\n\n'); textOpen = false; };
   const block = text => { closeText(); output.write(text + '\n\n'); };
   return event => {
     if (event.type === 'run_started') {
-      tools.reset(); streamed = false;
+      tools.reset(); streamed = new Set();
       block(`━━ 开始解题 · ${safeTerminal(event.run_id)} ━━\n证据目录：${safeTerminal(event.run_dir)}`);
+    } else if (event.type === 'tool_provisioning') {
+      block('工具准备：' + logPreview(provisioningText(event)));
     } else if (event.type === 'turn_start') {
-      streamed = false;
+      streamed = new Set();
     } else if (event.type === 'context_refresh_end') {
       if (event.errorMessage) block(`上下文：${logPreview(event.errorMessage)}`);
     } else if (event.type === 'message_start' && event.message?.role === 'assistant') {
-      streamed = false;
-    } else if (event.type === 'message_update' && event.assistantMessageEvent?.type === 'text_delta') {
-      if (!textOpen) output.write('模型说明（公开）：\n');
-      // Sanitize streamed text without buffering or clipping the public explanation.
-      output.write(safeTerminal(event.assistantMessageEvent.delta));
-      textOpen = true; streamed = true;
+      streamed = new Set();
+    } else if (assistantDelta(event)) {
+      const delta = assistantDelta(event);
+      if (currentKind !== delta.kind) closeText();
+      if (!textOpen) output.write(delta.kind === '思考' ? '模型思考（服务返回）：\n' : '模型说明（公开）：\n');
+      output.write(safeTerminal(delta.text));
+      textOpen = true; currentKind = delta.kind; streamed.add(delta.index);
     } else if (event.type === 'message_end' && event.message?.role === 'assistant') {
-      const text = event.message.content?.filter(x => x.type === 'text').map(x => x.text).join('\n');
-      if (!streamed && text) block(`模型说明（公开）：\n${safeTerminal(text)}`);
       closeText();
+      for (const blockValue of assistantBlocks(event.message)) {
+        if (!streamed.has(blockValue.index) && !streamed.has(blockValue.kind)) block(`${blockValue.kind === '思考' ? '模型思考（服务返回）' : '模型说明（公开）'}：\n${safeTerminal(blockValue.text)}`);
+      }
+      streamed = new Set();
     } else if (event.type === 'tool_execution_start') {
       block(toolCardText(tools.start(event)));
     } else if (event.type === 'tool_execution_end') {

@@ -1,5 +1,6 @@
 import { stripTerminalSequences } from '@earendil-works/pi-tui';
 import { safeTerminal } from '../util.js';
+import { provisioningState } from './activity.js';
 const plain = value => safeTerminal(stripTerminalSequences(String(value ?? ''))).replaceAll('\t', '  ');
 const values = value => Array.isArray(value) ? value.filter(x => x !== undefined && x !== null && x !== '') : value ? [value] : [];
 export function fileSize(bytes) {
@@ -37,6 +38,7 @@ export function solvingSummary(state) {
   add('下一步', summary?.next_steps, completion ? '本次运行已结束，可阅读解题报告' : '等待下一次实验安排');
   add('阻塞与缺口', [...values(summary?.blockers), ...values(summary?.remaining_gap), ...(summary?.blocker_kind ? [blockers[summary.blocker_kind] ?? summary.blocker_kind] : [])], '暂无已报告阻塞');
   add('已有能力', summary?.achieved_capabilities);
+  add('工具准备', (p.tool_environments ?? []).map(x => `${x.capabilities.join('、')} · ${provisioningState(x.state)}${x.cache_hit ? ' · 缓存命中' : ''}${x.error ? '\n' + x.error.message : ''}`));
   add('更正与撤回', summary?.corrections);
   if (p.experiments?.length) add('最近实验', p.experiments.map(e => `${e.purpose} · ${({ supports: '模型报告支持假设', contradicts: '模型报告反驳假设', unknown: '尚无确定结论' })[e.reported_result] ?? '结果待解释'}${e.next_action ? '\n下一步：' + e.next_action : ''}`));
   const files = p.files ?? [];

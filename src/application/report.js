@@ -9,6 +9,8 @@ import { installCore } from '../tools/core.js';
 import { Sessions } from '../runtime/sessions.js';
 import { DockerRuntime, resolveImage } from '../runtime/docker.js';
 import { solve } from './solve.js';
+import { ToolProvisioner } from '../provisioning/service.js';
+import { installProvisioning } from '../tools/provisioning.js';
 export async function diagnose(root) {
   const events = await readEvents(root);
   return {
@@ -39,6 +41,7 @@ export async function replay(root, {
   resolveImage: resolve = resolveImage,
   image,
   signal,
+  toolCacheRoot,
   runsRoot = 'runs'
 }) {
   invariant((await audit(root)).ok, 'Cannot replay corrupt evidence');
@@ -60,16 +63,23 @@ export async function replay(root, {
   });
   const sessions = new Sessions(runtime, evidence),
     registry = new ToolRegistry(state, evidence);
-  const allowed = new Set(['command_run', 'script_save', 'script_run', 'script_start', 'session_start', 'session_send', 'session_read', 'session_close', 'workflow_run', 'workflow_environment', 'artifact_export', 'asset_capture']);
+  const allowed = new Set(['command_run', 'script_save', 'script_run', 'script_start', 'session_start', 'session_send', 'session_read', 'session_close', 'workflow_run', 'workflow_environment', 'artifact_export', 'asset_capture', 'tool_exec']);
   const sessionIds = new Map(),
     scriptIds = new Map(),
     assetIds = new Map(),
     outcomes = [];
-  await evidence.document('recovery.json', {
+  const receipt = {
     schema_version: 1,
     run_id: basename(evidence.root),
     container: runtime.name,
-    pending: true
+    pending: true,
+    tool_containers: []
+  };
+  await evidence.document('recovery.json', receipt);
+  const provisioner = new ToolProvisioner({ runtime, evidence, state, image: pinned, runId: basename(evidence.root), signal, cacheRoot: toolCacheRoot,
+    runtimeFactory, allowDownload: false,
+    onOwnership: async name => { receipt.tool_containers.push(name); await evidence.document('recovery.json', receipt); },
+    onRelease: async name => { receipt.tool_containers = receipt.tool_containers.filter(x => x !== name); await evidence.document('recovery.json', receipt); }
   });
   await evidence.append('run_started', {
     identity: state.identity,
@@ -84,6 +94,7 @@ export async function replay(root, {
       runtime,
       sessions
     });
+    installProvisioning(registry, { provisioner, workspace });
     for (let index = 0; index < events.length; index++) {
       const event = events[index];
       if (event.type !== 'tool_started') continue;
@@ -92,6 +103,18 @@ export async function replay(root, {
       const args = {
         ...request.args
       };
+      if (request.name === 'tool_exec') {
+        const original = events.find(e => e.type === 'tool_provisioning' && e.state === 'ready' && e.environment_id === args.environment_id);
+        invariant(original, 'Recorded tool environment identity is missing');
+        const requested = await provisioner.request(original.capabilities);
+        const job = [...provisioner.jobs.values()].find(x => x.id === requested.preparation_id);
+        invariant(job, 'Cannot prepare recorded tool environment');
+        await job.promise;
+        const ready = await provisioner.status(job.id);
+        invariant(ready.state === 'ready', ready.error?.message ?? 'Recorded tool environment is unavailable');
+        args.environment_id = ready.environment_id;
+        if (args.inputs) args.inputs = args.inputs.map(input => ({ ...input, asset_id: assetIds.get(input.asset_id) ?? input.asset_id }));
+      }
       for (const field of ['asset_id']) if (args[field]) args[field] = assetIds.get(args[field]) ?? args[field];
       for (const field of ['asset_ids', 'parent_asset_ids']) if (args[field]) args[field] = args[field].map(id => assetIds.get(id) ?? id);
       if (args.session_id) {
@@ -130,7 +153,7 @@ export async function replay(root, {
     });
   } finally {
     const errors = [];
-    for (const close of [() => sessions.closeAll(), () => runtime.close()]) {
+    for (const close of [() => provisioner.close(), () => sessions.closeAll(), () => runtime.close()]) {
       try {
         await close();
       } catch (error) {
@@ -143,12 +166,7 @@ export async function replay(root, {
       });
       failure = new AggregateError([...(failure ? [failure] : []), ...errors], 'Replay cleanup unconfirmed');
     } else {
-      await evidence.document('recovery.json', {
-        schema_version: 1,
-        run_id: basename(evidence.root),
-        container: runtime.name,
-        pending: false
-      });
+      await evidence.document('recovery.json', { ...receipt, pending: false });
     }
     await evidence.append('run_finished', {
       status: errors.length ? 'cleanup_failed' : signal?.aborted ? 'cancelled' : failure || outcomes.some(x => x.is_error) ? 'failed' : 'replayed'

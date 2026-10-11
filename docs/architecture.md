@@ -29,3 +29,7 @@
 RunState 增加 assets：原始输入与派生内容采用统一引用，派生文件以证据快照保存；后续操作从快照重新物化并验证哈希，不依赖原工作路径。现有实验与摘要增加方法、假设、能力和阻塞关联，重复执行只提示不禁止。详细契约见 [workflows.md](workflows.md)。
 
 上下文分为静态系统/工具、压缩历史与历史状态快照、当前任务/状态/参考索引、近期原始交互。每 10 个完成的解题轮次整理当前状态，达到 Pi 窗口阈值才压缩较早交互；两者共用结构化维护器。见 [context-management.md](context-management.md)。
+
+工具供应由 `provisioning/catalog.js` 的固定配方和 `provisioning/service.js` 的准备/验证/缓存服务组成，`tools/provisioning.js` 负责模型接口和资产衔接。复用当前不可变镜像；新增依赖为只读目录，通过相同 DockerRuntime 创建独立离线执行容器，不修改主环境。后台供应状态与前台业务共用串行 RunState；活动容器进入恢复回执，回放仅复用已验证本地缓存。详见 [sandbox-tool-provisioning.md](sandbox-tool-provisioning.md)。
+
+2026-10-11 全局细节修复及最终验收记录见 [project-review-20261011.md](project-review-20261011.md)。

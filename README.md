@@ -47,7 +47,7 @@ npm install --no-save --ignore-scripts @earendil-works/pi-coding-agent@1.1.0
 
 本仓库把 Pi 声明为可选 peer dependency，并以精确版本 dev dependency 准备开发环境，允许未安装模型运行时的环境先运行普通测试、导入、预览、报告。没有 SDK 时 solve 明确报错，不回退到 Python agent。Pi 认证可在本工作台 `/login`、Pi 自身 CLI 或 provider 环境变量中配置，ctfbot 不复制旧 Codex token。使用参考版本的模型 ID；不假定旧 App Server 的模型名称可直接复用。
 
-解题要求非 root 控制器、可访问的 Docker daemon、本地已构建的工具镜像。可沿用 reference/ctfbot 的 general-v3 镜像及其构建说明。镜像必须包含 **Python3（进程监督）、Node（领域工作流）**；图片查看另外需要 Pillow。启动前解析本地 image ID，始终 `--pull=never`，不自动下载镜像或安装依赖。
+解题要求非 root 控制器、可访问的 Docker daemon、本地已构建的工具镜像。可沿用 reference/ctfbot 的 general-v3 镜像及其构建说明。镜像必须包含 **Python3（进程监督）、Node（领域工作流）**；图片查看另外需要 Pillow。启动前解析本地 image ID，始终 `--pull=never`，不自动下载或更换镜像。工具供应可按固定配方下载少量已锁定的 wheel，在独立离线环境安装和执行；不会改变主沙箱。机制与边界见 [sandbox-tool-provisioning.md](docs/sandbox-tool-provisioning.md)。
 
 ## 导入和解题
 
@@ -64,7 +64,7 @@ node src/cli.js solve data/imports/<snapshot> \
 
 单文件或仅含一个文件的目录均可导入，单附件 1 byte..32 MiB。未授权时仍可导入和预览。运行前再次校验任务及所有附件的哈希，并复制到独立运行快照。旧 admitted/static_files_only workspace 的 TASK.md、provenance.json、input 可直接预览和运行，授权依据必须仍有效。传 `--image` 可覆盖默认 `ctfbot-tools:candidate`；镜像仅做本地 inspect。
 
-直接 `npm start` 打开工作台：`/login` → `/model` → `/thinking` → `/import <路径>` → `/run`。支持 API key、服务提供的 OAuth 和 `/endpoint` 自定义兼容 API，配置复用 Pi 认证。运行时 `/stop` 或 Ctrl+C 停止，`/state` 查看状态，`/flags` 查看完整候选，其他文字作为 steering 输入。公开说明和工具事件实时显示；隐藏推理不显示。终端显示过滤控制字符，候选原始字节仍保留在证据中。没有整题轮次、token、总时长限额；单次命令 120 秒，后台进程最多 30 分钟、16 MiB 输出，最多 8 个并发会话。后台会话为管道，不是 PTY。主动 `session_close` 返回 closed，保留实际退出码；不会把主动终止误报为工具失败。
+直接 `npm start` 打开工作台：`/login` → `/model` → `/thinking` → `/import <路径>` → `/run`。支持 API key、服务提供的 OAuth 和 `/endpoint` 自定义兼容 API，配置复用 Pi 认证。运行时 `/stop` 或 Ctrl+C 停止，`/state` 查看状态，`/flags` 查看完整候选，其他文字作为 steering 输入。公开说明、服务实际返回的思考文本和工具事件分区实时显示；不显示思考签名或服务未返回的隐藏内容。终端显示过滤控制字符，候选原始字节仍保留在证据中。没有整题轮次、token、总时长限额；单次命令 120 秒，后台进程最多 30 分钟、16 MiB 输出，最多 8 个并发会话。后台会话为管道，不是 PTY。主动 `session_close` 返回 closed，保留实际退出码；不会把主动终止误报为工具失败。
 
 Flag 提交不检查格式或比赛平台接受情况。每个 Flag 提交后继续实际剩余子题；完成必须包含所有候选 ID 和 agent 编写的 writeup。completed 退出 0；partial/unsolved/错误退出 1；手动停止退出 130。Pi 压缩可能额外使用模型额度，与旧实现的无模型快照方案不同。
 

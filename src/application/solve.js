@@ -11,6 +11,8 @@ import { loadGrant, NetworkBroker } from '../runtime/network.js';
 import { installOptional } from '../tools/optional.js';
 import { createProgressReader } from './progress.js';
 import { invariant } from '../util.js';
+import { ToolProvisioner } from '../provisioning/service.js';
+import { installProvisioning } from '../tools/provisioning.js';
 
 /** CLI and terminal UI share this application service. Dependencies allow offline contract tests. */
 export async function solve(options, dependencies = {}) {
@@ -27,8 +29,15 @@ export async function solve(options, dependencies = {}) {
   const evidence = await EvidenceStore.create(options.runsRoot ?? 'runs');
   const runId = basename(evidence.root);
   const runtimeFactory = dependencies.runtimeFactory ?? (config => new DockerRuntime(config));
-  let runtime, sessions, broker, agent, state, error, result, cleanupError;
+  let runtime, sessions, broker, agent, state, error, result, cleanupError, provisioner;
   const emit = event => options.onEvent?.(event);
+  const receipt = { schema_version: 1, run_id: runId, pending: true, tool_containers: [] };
+  let receiptQueue = Promise.resolve();
+  const saveReceipt = update => {
+    const pending = receiptQueue.then(() => { Object.assign(receipt, update); return evidence.document('recovery.json', receipt); });
+    receiptQueue = pending.catch(() => {});
+    return pending;
+  };
   try {
     const workspace = await snapshot(options.workspace, join(evidence.root, 'challenge'));
     state = new RunState(evidence, {
@@ -54,12 +63,7 @@ export async function solve(options, dependencies = {}) {
       onLost: error => lostSandbox.abort(error)
     });
     // Persist the ownership receipt BEFORE contacting Docker, covering uncertain creates and crashes.
-    await evidence.document('recovery.json', {
-      schema_version: 1,
-      run_id: runId,
-      container: runtime.name,
-      pending: true
-    });
+    await saveReceipt({ container: runtime.name });
     await runtime.start(runSignal);
     sessions = new Sessions(runtime, evidence);
     if (grant) {
@@ -68,24 +72,32 @@ export async function solve(options, dependencies = {}) {
         onLost: error => lostSandbox.abort(error),
         onOwnership: async name => {
           broker.ownedName = name;
-          await evidence.document('recovery.json', {
-            schema_version: 1,
-            run_id: runId,
-            container: runtime.name,
-            service_container: name,
-            pending: true
-          });
+          await saveReceipt({ service_container: name });
         }
       });
       await broker.start(runSignal);
     }
     const registry = new ToolRegistry(state, evidence);
+    provisioner = new ToolProvisioner({ runtime, evidence, state, input: workspace.input, image, runId, signal: runSignal, onEvent: emit,
+      cacheRoot: options.toolCacheRoot,
+      onOwnership: name => {
+        const pending = receiptQueue.then(() => { receipt.tool_containers.push(name); return evidence.document('recovery.json', receipt); });
+        receiptQueue = pending.catch(() => {});
+        return pending;
+      },
+      onRelease: name => {
+        const pending = receiptQueue.then(() => { receipt.tool_containers = receipt.tool_containers.filter(x => x !== name); return evidence.document('recovery.json', receipt); });
+        receiptQueue = pending.catch(() => {});
+        return pending;
+      }
+    });
     await installCore(registry, {
       workspace,
       runtime,
       sessions,
       supportsImages: prepared.supportsImages
     });
+    installProvisioning(registry, { provisioner, workspace });
     await installOptional(registry, {
       broker,
       memoryPath: options.memoryPath
@@ -123,7 +135,7 @@ export async function solve(options, dependencies = {}) {
     });
   } finally {
     const cleanup = [];
-    for (const close of [() => agent?.close(), () => sessions?.closeAll(), () => runtime?.close(), () => broker?.close()]) {
+    for (const close of [() => agent?.close(), () => provisioner?.close(), () => sessions?.closeAll(), () => runtime?.close(), () => broker?.close()]) {
       try {
         await close();
       } catch (caught) {
@@ -135,15 +147,7 @@ export async function solve(options, dependencies = {}) {
       await evidence.append('cleanup_failed', {
         errors: cleanup.map(x => x.message)
       });
-    } else if (runtime) await evidence.document('recovery.json', {
-      schema_version: 1,
-      run_id: runId,
-      container: runtime.name,
-      ...(broker?.ownedName ? {
-        service_container: broker.ownedName
-      } : {}),
-      pending: false
-    });
+    } else if (runtime) await saveReceipt({ pending: false });
   }
   const status = cleanupError ? 'cleanup_failed' : options.signal?.aborted ? 'cancelled' : error ? 'failed' : result.outcome;
   await evidence.append('run_finished', {

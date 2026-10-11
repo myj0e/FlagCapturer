@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { realpath } from 'node:fs/promises';
 import { runProcess, checkArgv } from './process.js';
-import { invariant, base64 } from '../util.js';
+import { invariant, base64, integer } from '../util.js';
 export function imageReference(image) {
   invariant(typeof image === 'string' && /^(?:sha256:[a-f0-9]{64}|[a-zA-Z0-9._/:+-]+@sha256:[a-f0-9]{64})$/.test(image), 'Use an immutable sha256 image ID or repository digest');
   return image;
@@ -54,6 +54,7 @@ export class DockerRuntime {
     runId,
     runner = runProcess,
     sessionsFactory,
+    extension,
     onLost = () => {}
   } = {}) {
     this.input = input;
@@ -62,6 +63,7 @@ export class DockerRuntime {
     this.onLost = onLost;
     this.runner = runner;
     this.sessionsFactory = sessionsFactory;
+    this.extension = extension;
     this.name = `ctfbot-${randomUUID()}`;
     this.started = false;
     this.created = false;
@@ -75,7 +77,15 @@ export class DockerRuntime {
     invariant(!/[,\r\n]/.test(source), 'Unsupported Docker mount path');
     const uid = process.getuid?.() ?? 1000,
       gid = process.getgid?.() ?? 1000;
-    const result = await this.runner('docker', ['create', '--name', this.name, '--pull=never', '--label', `flagcapturer.run=${this.runId}`, '--network=none', '--read-only', '--cpus=2', '--memory=2g', '--memory-swap=2g', '--pids-limit=256', '--user', `${uid}:${gid}`, '--cap-drop=ALL', '--security-opt=no-new-privileges:true', '--env', 'HOME=/tmp', '--env', 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', '--tmpfs', `/tmp:rw,nosuid,nodev,size=64m,uid=${uid},gid=${gid}`, '--tmpfs', `/work:rw,exec,nosuid,nodev,size=1g,uid=${uid},gid=${gid},mode=0700`, '--mount', `type=bind,source=${source},target=/challenge,readonly`, '--workdir=/work', '--entrypoint=/bin/sh', this.image, '-c', 'mkdir -p /work/.control && exec sleep infinity'], {
+    const extra = [];
+    if (this.extension) {
+      const root = await realpath(this.extension.root);
+      invariant(!/[,\r\n]/.test(root), 'Unsupported extension mount path');
+      // Controller-only configuration; no model-provided mount arguments.
+      extra.push('--mount', `type=bind,source=${root},target=/opt/ctf-extension${this.extension.writable ? '' : ',readonly'}`);
+      if (!this.extension.writable) extra.push('--env', 'PYTHONPATH=/opt/ctf-extension/site');
+    }
+    const result = await this.runner('docker', ['create', '--name', this.name, '--pull=never', '--label', `flagcapturer.run=${this.runId}`, '--network=none', '--read-only', '--cpus=2', '--memory=2g', '--memory-swap=2g', '--pids-limit=256', '--user', `${uid}:${gid}`, '--cap-drop=ALL', '--security-opt=no-new-privileges:true', '--env', 'HOME=/tmp', '--env', 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', '--tmpfs', `/tmp:rw,nosuid,nodev,size=64m,uid=${uid},gid=${gid}`, '--tmpfs', `/work:rw,exec,nosuid,nodev,size=1g,uid=${uid},gid=${gid},mode=0700`, '--mount', `type=bind,source=${source},target=/challenge,readonly`, ...extra, '--workdir=/work', '--entrypoint=/bin/sh', this.image, '-c', 'mkdir -p /work/.control && exec sleep infinity'], {
       signal
     });
     // A timed-out create may have succeeded at the daemon. Always attempt owned-name cleanup.
@@ -102,6 +112,8 @@ export class DockerRuntime {
     input,
     limit = 1024 * 1024
   } = {}) {
+    integer(timeout, 1, 30 * 60 * 1000, 'timeout');
+    integer(limit, 1, 32 * 1024 * 1024, 'output limit');
     const id = randomUUID();
     const result = await this.runner('docker', this.execArgs(argv, id, timeout, limit), {
       timeout: timeout + 5000,
@@ -147,7 +159,7 @@ export class DockerRuntime {
       limit: Math.ceil(maxBytes * 4 / 3) + 4096
     });
     invariant(result.code === 0 && !result.truncated, 'Artifact export failed or exceeds byte limit');
-    return base64(result.stdout.toString().trim());
+    return base64(result.stdout.toString().trim(), Math.ceil(maxBytes * 4 / 3) + 4);
   }
   async close() {
     if (this.closed || !this.created) return;

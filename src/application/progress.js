@@ -1,5 +1,5 @@
 // Read-only projection of existing run state. No inferred facts, file parsing or agent loop.
-const meaningfulTools = new Set(['command_run', 'script_run', 'script_start', 'session_start', 'session_read', 'session_send', 'workflow_run', 'challenge_list', 'challenge_read_text', 'challenge_read_bytes', 'artifact_read', 'artifact_tail', 'artifact_find', 'workflow_environment', 'asset_read', 'asset_capture', 'artifact_export', 'image_view', 'http_request', 'remote_tcp_exchange', 'candidate_check']);
+const meaningfulTools = new Set(['tool_exec', 'command_run', 'script_run', 'script_start', 'session_start', 'session_read', 'session_send', 'workflow_run', 'challenge_list', 'challenge_read_text', 'challenge_read_bytes', 'artifact_read', 'artifact_tail', 'artifact_find', 'workflow_environment', 'asset_read', 'asset_capture', 'artifact_export', 'image_view', 'http_request', 'remote_tcp_exchange', 'candidate_check']);
 const basename = path => String(path ?? '').split('/').filter(Boolean).at(-1) ?? '';
 export function assetDisplayName(asset) {
   const transform = asset.transformation ?? {};
@@ -42,6 +42,7 @@ export function createProgressReader(state, { task, knowledge = new Map() } = {}
     const derived = assets.filter(a => a.origin !== 'input');
     cached = {
       task, revision: state.revision, summary,
+      tool_environments: [...new Map([...(state.sections.tool_environments?.values() ?? [])].map(x => [x.preparation_id, x])).values()].slice(-8),
       summary_pending: Boolean(summary && afterSummary.some(o => meaningfulTools.has(o.tool))),
       claims: claims.filter(c => !superseded.has(c.id)).slice(-8).map(c => ({ statement: c.statement, state: c.state })),
       experiments: [...state.sections.experiments.values()].slice(-3).map(e => ({ purpose: e.purpose, reported_result: e.reported_result, next_action: e.next_action })),
