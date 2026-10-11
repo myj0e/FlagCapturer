@@ -1,0 +1,6 @@
+# Installed into the main Python 3.12 environment; preserve the baseline lock.
+opencv-python-headless>=4.10,<5
+pytesseract>=0.3.13,<0.4
+volatility3>=2.11,<3
+frida-tools>=14,<16
+web3>=7,<8

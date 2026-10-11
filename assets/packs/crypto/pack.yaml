@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "name": "crypto",
+  "version": "2.0.0",
+  "labels": [
+    "crypto"
+  ],
+  "triggers": [
+    "encoding",
+    "RSA",
+    "integer arithmetic"
+  ],
+  "required_binaries": [
+    "python3"
+  ],
+  "optional_binaries": [
+    "yafu",
+    "sage",
+    "openssl",
+    "factor",
+    "veracrypt",
+    "cryptsetup",
+    "bkcrack",
+    "fcrackzip",
+    "john",
+    "zip2john",
+    "hashcat"
+  ],
+  "operations": [
+    "decode",
+    "rsa"
+  ],
+  "network": "none",
+  "risk": "untrusted parser/executable runs only inside sandbox",
+  "sources": [
+    {
+      "component": "ctfbot authored wrappers and playbooks",
+      "source": "repository src/ctfbot/packs",
+      "license": "MIT"
+    },
+    {
+      "component": "Python and optional tools",
+      "source": "operator-provided immutable runtime image",
+      "license": "not redistributed by this pack; record runtime image inventory"
+    }
+  ],
+  "fixture_version": "authored-v1",
+  "coverage_status": "implemented; acceptance pending",
+  "tool_contract": "workflow_run(pack, operation, path OR asset_id OR asset_ids, parameters); versioned per-operation schema, hash-verified assets, explicit status and coverage; full result is retained in stdout evidence"
+}

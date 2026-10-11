@@ -1,4 +1,6 @@
 *
 !Dockerfile
-!requirements.lock
-!inventory.py
+!*.py
+!*.sh
+!*.json
+!requirements*.lock

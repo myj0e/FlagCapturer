@@ -1,0 +1,54 @@
+{
+  "ghidra": {
+    "version": "Ghidra_12.1.4_build",
+    "url": "https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.4_build/ghidra_12.1.4_PUBLIC_20260921.zip",
+    "sha256": "ddac49f903da9d5bac833e5cc79395098b9c33cfd3279be5f31bd00387d2d4db"
+  },
+  "jdk": {
+    "version": "jdk-25.0.4.1+1",
+    "url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.4.1%2B1/OpenJDK25U-jdk_x64_linux_hotspot_25.0.4.1_1.tar.gz",
+    "sha256": "dbb698396d478e7fa2b1e50f4103324b2a99b90569ee27c33f2261f9215cf41e"
+  },
+  "grpcurl": {
+    "version": "v1.9.4",
+    "url": "https://github.com/fullstorydev/grpcurl/releases/download/v1.9.4/grpcurl_1.9.4_linux_x86_64.tar.gz",
+    "sha256": "97e13d58d2733a0e62cd2571d1d5f0c02823f0d25282f08bddedf1ad9c5d1736"
+  },
+  "jadx": {
+    "version": "v1.5.6",
+    "url": "https://github.com/skylot/jadx/releases/download/v1.5.6/jadx-1.5.6.zip",
+    "sha256": "545ea2be9c242511bc145755cf4bda2485ade42966e096f8b4d3da2a230e8974"
+  },
+  "foundry": {
+    "version": "v1.8.5",
+    "url": "https://github.com/foundry-rs/foundry/releases/download/v1.8.5/foundry_v1.8.5_linux_amd64.tar.gz",
+    "sha256": "6c66ffcc55fa4249197721baa3098bc208014ea1d8aa04b2ed50ac6bccffb226"
+  },
+  "pwndbg": {
+    "version": "2026.09.15",
+    "url": "https://github.com/pwndbg/pwndbg/releases/download/2026.09.15/pwndbg_2026.09.15_x86_64-portable.tar.xz",
+    "sha256": "7ba64666ee595885ba4b0e073f85e423829103e9fdbe921ba4eef1acd9150803"
+  },
+  "solc": {
+    "version": "v0.8.37",
+    "url": "https://github.com/argotorg/solidity/releases/download/v0.8.37/solc-static-linux",
+    "sha256": "5de843c2c93563cc66425c99a4fb13fdbf32b4c4ae07469480faaf126e14404a"
+  },
+  "cyberchef": {
+    "version": "v11.5.0",
+    "url": "https://github.com/gchq/CyberChef/releases/download/v11.5.0/CyberChef_8cd426dd4f40f1423912d5fad91b578a86a65112.zip",
+    "sha256": "f6478925d3eaa16ec08626a85f5b85eed10d531a5e18700615fed7ecb024cccf"
+  },
+  "networkminer": {
+    "version": "3.2",
+    "url": "https://download.netresec.com/networkminer/NetworkMiner_3-2.zip",
+    "sha256": "daceec649fb4fe59b11e4a9e4ecd5f51c1dd37824280dfbeac67bec27b6b6d60",
+    "hash_source": "Observed from versioned upstream HTTPS download, 2026-10-10"
+  },
+  "burpsuite": {
+    "version": "2026.9.2",
+    "url": "https://portswigger.net/burp/releases/download?product=desktop&version=2026.9.2&type=Jar",
+    "sha256": "3571f8cadbfd65b0b090d2753735c40b76ad7fdde0b927df2b22ec46ea09693a",
+    "hash_source": "https://portswigger.net/burp/downloads (JAR SHA-256)"
+  }
+}

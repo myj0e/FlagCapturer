@@ -1,66 +1,15 @@
-# Python bytecode and native build products
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-
-# Packaging
-.Python
-build/
-dist/
-downloads/
-eggs/
-.eggs/
-wheels/
-*.egg-info/
-*.egg
-MANIFEST
-
-# Virtual environments
-.venv/
-venv/
-env/
-ENV/
-
-# Test, coverage, lint, and type-check caches
-.pytest_cache/
-.tox/
-.nox/
-.coverage
-.coverage.*
-htmlcov/
-coverage.xml
-.hypothesis/
-.mypy_cache/
-.dmypy.json
-.ruff_cache/
-.pytype/
-.pyre/
-
-# Local credentials and configuration
-.env
-.env.*
-!.env.example
-.envrc
-.pypirc
-
-# Local CTF data: challenge attachments, flags, traces, and generated artifacts
+reference/
+node_modules/
 data/
-# Domain playbooks are source resources, not private challenge data.
-!src/ctfbot/packs/data/
-!src/ctfbot/packs/data/**
 runs/
 artifacts/
 reports/
+.env
 *.log
-
-# Editors and operating systems
-.idea/
-.vscode/
-.DS_Store
-Thumbs.db
-
-# Common interactive Python artifacts
-.ipynb_checkpoints/
-profile_default/
-ipython_config.py
+coverage/
+__pycache__/
+*.py[cod]
+.env.*
+!.env.example
+*.pem
+*.key

@@ -1,0 +1,35 @@
+{
+  "name": "flagcapturer",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "CTF workbench powered by Pi agent",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "bin": {
+    "ctfbot": "./src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/cli.js",
+    "test": "node --test --experimental-test-isolation=none test/*.test.js",
+    "test:integration": "node --test --experimental-test-isolation=none test/integration/*.test.js",
+    "check": "node --experimental-vm-modules scripts/check.mjs",
+    "doctor": "node src/cli.js doctor"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "1.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "1.1.0"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "1.1.0",
+    "@earendil-works/pi-tui": "1.1.0"
+  }
+}

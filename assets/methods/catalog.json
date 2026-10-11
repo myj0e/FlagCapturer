@@ -1,0 +1,832 @@
+[
+  {
+    "id": "method/goal-capabilities",
+    "version": "1.0.0",
+    "title": "从目标反推能力",
+    "summary": "已获得部分能力，但距离成功条件仍不明确",
+    "tags": [
+      "goal",
+      "capability",
+      "primitive",
+      "目标",
+      "能力",
+      "原语"
+    ],
+    "triggers": [
+      "已获得部分能力，但距离成功条件仍不明确"
+    ],
+    "prerequisites": [
+      "明确题目成功条件和已验证的可控量"
+    ],
+    "exclusions": [
+      "不能把推测的权限或能力当成已获得"
+    ],
+    "probe": "列出成功条件、已有能力和一个尚缺的连接；选择能验证该连接的最小实验。",
+    "interpretation": {
+      "supports": [
+        "实验直接证明所缺能力可达"
+      ],
+      "contradicts": [
+        "消费者、权限或触发条件不成立"
+      ],
+      "inconclusive": [
+        "只有错误消息或推测，没有可观察副作用"
+      ]
+    },
+    "branches": [
+      "沿成功条件向前追踪；复用已有能力而非重写完整攻击"
+    ],
+    "capabilities": {
+      "binaries": [],
+      "modules": []
+    },
+    "operations": [],
+    "sources": [
+      "https://github.com/hackthebox/cyber-apocalypse-2024/tree/main/pwn/%5BMedium%5D%20Death%20Note"
+    ],
+    "validation": "source-derived",
+    "license": "Repository-authored method description; linked source retains its own license."
+  },
+  {
+    "id": "method/format-views",
+    "version": "1.0.0",
+    "title": "检查多格式与解析覆盖",
+    "summary": "扩展名、魔数或解析器结果不一致",
+    "tags": [
+      "polyglot",
+      "magic",
+      "file",
+      "png",
+      "pdf",
+      "格式",
+      "魔数",
+      "尾随"
+    ],
+    "triggers": [
+      "扩展名、魔数或解析器结果不一致"
+    ],
+    "prerequisites": [
+      "保留原始字节、偏移和哈希"
+    ],
+    "exclusions": [
+      "单一魔数或内嵌字符串不证明有效嵌套文件"
+    ],
+    "probe": "先检查结构与签名偏移，再用对应解析器分别检查；比较覆盖范围和尾随数据。",
+    "interpretation": {
+      "supports": [
+        "不同有效解析视图得到互补内容"
+      ],
+      "contradicts": [
+        "候选结构损坏或只是普通数据中的签名"
+      ],
+      "inconclusive": [
+        "某解析器不支持或只读取部分文件"
+      ]
+    },
+    "branches": [
+      "按已确认偏移提取并保存产物；不要丢弃原视图"
+    ],
+    "capabilities": {
+      "binaries": [],
+      "modules": []
+    },
+    "operations": [
+      "forensics/triage",
+      "forensics/slice",
+      "stego/png"
+    ],
+    "sources": [
+      "https://rylie.moe/blog/picoctf-2024-forensics/#secret-of-the-polyglot"
+    ],
+    "validation": "source-derived",
+    "license": "Repository-authored method description; linked source retains its own license."
+  },
+  {
+    "id": "method/metadata-semantics",
+    "version": "1.0.0",
+    "title": "按内容检查元数据字段",
+    "summary": "描述、归属或 URL 字段中出现异常字符模式",
+    "tags": [
+      "metadata",
+      "exif",
+      "attribution",
+      "url",
+      "base64",
+      "元数据",
+      "编码"
+    ],
+    "triggers": [
+      "描述、归属或 URL 字段中出现异常字符模式"
+    ],
+    "prerequisites": [
+      "字段值可完整提取"
+    ],
+    "exclusions": [
+      "字段名称不能证明内容必然是网址或自然语言"
+    ],
+    "probe": "查看元数据的原始值；对一个符合编码约束的字段进行严格解码并保存完整结果。",
+    "interpretation": {
+      "supports": [
+        "解码得到结构合理且可继续验证的内容"
+      ],
+      "contradicts": [
+        "严格解码失败或结果无对应结构"
+      ],
+      "inconclusive": [
+        "工具只显示截断字段"
+      ]
+    },
+    "branches": [
+      "读取完整字段；继续检查产物的实际格式"
+    ],
+    "capabilities": {
+      "binaries": [
+        "exiftool"
+      ],
+      "modules": []
+    },
+    "operations": [
+      "crypto/decode"
+    ],
+    "sources": [
+      "https://rylie.moe/blog/picoctf-2024-forensics/#canyousee"
+    ],
+    "validation": "source-derived",
+    "license": "Repository-authored method description; linked source retains its own license."
+  },
+  {
+    "id": "method/cheap-resources",
+    "version": "1.0.0",
+    "title": "先检查容器与资源",
+    "summary": "APK、ZIP 或带资源目录的软件包",
+    "tags": [
+      "apk",
+      "mobile",
+      "zip",
+      "resource",
+      "android",
+      "资源",
+      "容器"
+    ],
+    "triggers": [
+      "APK、ZIP 或带资源目录的软件包"
+    ],
+    "prerequisites": [
+      "容器结构可识别"
+    ],
+    "exclusions": [
+      "文件名看似重要不是内容正确性的证据"
+    ],
+    "probe": "先列出条目，按题目线索检查小型文本或配置资源，再决定是否需要反编译。",
+    "interpretation": {
+      "supports": [
+        "资源文件直接包含有效线索或可验证编码"
+      ],
+      "contradicts": [
+        "资源检查排除该方向"
+      ],
+      "inconclusive": [
+        "条目加密、格式不支持或清单不完整"
+      ]
+    },
+    "branches": [
+      "按索引受控提取；必要时检查代码和运行行为"
+    ],
+    "capabilities": {
+      "binaries": [],
+      "modules": []
+    },
+    "operations": [
+      "forensics/archive",
+      "forensics/extract",
+      "crypto/decode"
+    ],
+    "sources": [
+      "https://tan-junwei.github.io/CTF-Writeups/PicoCTF/Forensics/Mob-psycho"
+    ],
+    "validation": "source-derived",
+    "license": "Repository-authored method description; linked source retains its own license."
+  },
+  {
+    "id": "method/rsa-parameters",
+    "version": "1.0.0",
+    "title": "先验证 RSA 参数结构",
+    "summary": "RSA 生成代码、异常位数或非常规模数",
+    "tags": [
+      "rsa",
+      "prime",
+      "modulus",
+      "constant",
+      "参数",
+      "素数",
+      "模数"
+    ],
+    "triggers": [
+      "RSA 生成代码、异常位数或非常规模数"
+    ],
+    "prerequisites": [
+      "获得精确整数及其生成语义"
+    ],
+    "exclusions": [
+      "概率素性检查不是证明；素数幂不能套用两素数公式"
+    ],
+    "probe": "计算生成常量，检查 n 的实际结构及 e 的可逆条件；只在前提成立时求解并做重加密关系检查。",
+    "interpretation": {
+      "supports": [
+        "模数结构退化或得到经验证的分解"
+      ],
+      "contradicts": [
+        "结构假设与原始生成代码不符"
+      ],
+      "inconclusive": [
+        "小因子搜索没有结果，或仅概率素性判断"
+      ]
+    },
+    "branches": [
+      "转向泄露、约束或其他结构；不要把无小因子理解为安全"
+    ],
+    "capabilities": {
+      "binaries": [
+        "python3"
+      ],
+      "modules": [
+        "sympy"
+      ]
+    },
+    "operations": [
+      "crypto/rsa"
+    ],
+    "sources": [
+      "https://github.com/hackthebox/cyber-apocalypse-2024/tree/main/crypto/%5BVery%20Easy%5D%20Primary%20Knowledge"
+    ],
+    "validation": "source-derived",
+    "license": "Repository-authored method description; linked source retains its own license."
+  },
+  {
+    "id": "method/partial-constraints",
+    "version": "1.0.0",
+    "title": "把局部泄露变成逐层约束",
+    "summary": "已知因子部分数位、位或中间关系",
+    "tags": [
+      "rsa",
+      "partial",
+      "digits",
+      "constraint",
+      "z3",
+      "泄露",
+      "约束",
+      "数位"
+    ],
+    "triggers": [
+      "已知因子部分数位、位或中间关系"
+    ],
+    "prerequisites": [
+      "明确进制、位置、符号和泄露范围"
+    ],
+    "exclusions": [
+      "贪心保留单个候选可能丢失真解"
+    ],
+    "probe": "先在小位数样本验证约束；逐层保留所有一致候选并记录候选数量。",
+    "interpretation": {
+      "supports": [
+        "约束显著缩小候选且最终满足完整关系"
+      ],
+      "contradicts": [
+        "真实样本在某层被全部排除"
+      ],
+      "inconclusive": [
+        "候选爆炸，尚无充分约束"
+      ]
+    },
+    "branches": [
+      "核对位序与进位；最终验证乘积、素性和编码"
+    ],
+    "capabilities": {
+      "binaries": [
+        "python3"
+      ],
+      "modules": []
+    },
+    "operations": [],
+    "sources": [
+      "https://github.com/hackthebox/cyber-apocalypse-2024/tree/main/crypto/%5BMedium%5D%20Partial%20Tenacity"
+    ],
+    "validation": "source-derived",
+    "license": "Repository-authored method description; linked source retains its own license."
+  },
+  {
+    "id": "method/fragment-lineage",
+    "version": "1.0.0",
+    "title": "关联并重组分片",
+    "summary": "流量或容器中存在多个有序分块",
+    "tags": [
+      "pcap",
+      "smtp",
+      "fragment",
+      "reassemble",
+      "archive",
+      "分片",
+      "重组",
+      "流量"
+    ],
+    "triggers": [
+      "流量或容器中存在多个有序分块"
+    ],
+    "prerequisites": [
+      "建立每片与会话、附件或密码的对应关系"
+    ],
+    "exclusions": [
+      "字符串排序与协议序号不同；不能忽略缺片或重复"
+    ],
+    "probe": "先提取少量分片验证关联；声明完整序号范围，再按显式位置重组。",
+    "interpretation": {
+      "supports": [
+        "分片齐全，重组文件结构和长度一致"
+      ],
+      "contradicts": [
+        "顺序假设产生损坏结构或缺片"
+      ],
+      "inconclusive": [
+        "片段加密未解开或传输被截断"
+      ]
+    },
+    "branches": [
+      "逐层保留派生产物；核对重复、缺失和重建格式"
+    ],
+    "capabilities": {
+      "binaries": [],
+      "modules": []
+    },
+    "operations": [
+      "forensics/reassemble",
+      "forensics/archive"
+    ],
+    "sources": [
+      "https://github.com/hackthebox/cyber-apocalypse-2024/tree/main/forensics/%5BMedium%5D%20Phreaky"
+    ],
+    "validation": "source-derived",
+    "license": "Repository-authored method description; linked source retains its own license."
+  },
+  {
+    "id": "method/validation-boundary",
+    "version": "1.0.0",
+    "title": "定位校验与消费边界",
+    "summary": "一个入口过滤输入，但另一个服务消费同类数据",
+    "tags": [
+      "web",
+      "rpc",
+      "grpc",
+      "validation",
+      "input",
+      "boundary",
+      "校验",
+      "边界"
+    ],
+    "triggers": [
+      "一个入口过滤输入，但另一个服务消费同类数据"
+    ],
+    "prerequisites": [
+      "源码或观察能定位入口和实际消费者"
+    ],
+    "exclusions": [
+      "后端可达性、权限和协议能力必须单独确认"
+    ],
+    "probe": "绘制输入经过的组件；在已授权环境中用普通标记比较各入口的校验和副作用。",
+    "interpretation": {
+      "supports": [
+        "同一安全条件在消费入口缺失"
+      ],
+      "contradicts": [
+        "服务端重新验证或入口不可达"
+      ],
+      "inconclusive": [
+        "仅客户端过滤差异，未确认后端行为"
+      ]
+    },
+    "branches": [
+      "先验证原语；文件写入后继续检查消费者和触发条件"
+    ],
+    "capabilities": {
+      "binaries": [],
+      "modules": []
+    },
+    "operations": [],
+    "sources": [
+      "https://github.com/hackthebox/cyber-apocalypse-2024/tree/main/web/%5BEasy%5D%20Testimonial"
+    ],
+    "validation": "source-derived",
+    "license": "Repository-authored method description; linked source retains its own license."
+  },
+  {
+    "id": "method/checked-object",
+    "version": "1.0.0",
+    "title": "核对被校验与被使用的对象",
+    "summary": "签名、域名或标识经过多次拼接和解释",
+    "tags": [
+      "browser",
+      "domain",
+      "cookie",
+      "hash",
+      "object",
+      "origin",
+      "校验",
+      "对象",
+      "浏览器"
+    ],
+    "triggers": [
+      "签名、域名或标识经过多次拼接和解释"
+    ],
+    "prerequisites": [
+      "明确规范化顺序及目标运行时版本"
+    ],
+    "exclusions": [
+      "不同浏览器和库不能假定语义一致"
+    ],
+    "probe": "比较校验时的完整对象与实际消费对象；构造只改变一个组成部分的小样本。",
+    "interpretation": {
+      "supports": [
+        "对象身份或隔离边界在使用时变化"
+      ],
+      "contradicts": [
+        "规范化后严格绑定同一对象"
+      ],
+      "inconclusive": [
+        "只在非目标版本中观察到差异"
+      ]
+    },
+    "branches": [
+      "在题目对应环境确认完整链条"
+    ],
+    "capabilities": {
+      "binaries": [],
+      "modules": []
+    },
+    "operations": [],
+    "sources": [
+      "https://github.com/google/google-ctf/tree/main/2024/quals/web-game-arcade"
+    ],
+    "validation": "source-derived",
+    "license": "Repository-authored method description; linked source retains its own license."
+  },
+  {
+    "id": "method/lifetime-primitives",
+    "version": "1.0.0",
+    "title": "从生命周期缺陷提炼原语",
+    "summary": "对象释放后仍可访问，或已有间接调用功能",
+    "tags": [
+      "pwn",
+      "uaf",
+      "heap",
+      "leak",
+      "libc",
+      "lifetime",
+      "原语",
+      "堆",
+      "泄露"
+    ],
+    "triggers": [
+      "对象释放后仍可访问，或已有间接调用功能"
+    ],
+    "prerequisites": [
+      "确认架构、运行库及对象生命周期"
+    ],
+    "exclusions": [
+      "泄露地址与调用能力分别验证；偏移必须匹配版本"
+    ],
+    "probe": "分别测试可读、可写和可调用范围；记录实际获得的能力，再连接到目标。",
+    "interpretation": {
+      "supports": [
+        "最小样本稳定证明一个原语"
+      ],
+      "contradicts": [
+        "对象重新初始化或无法控制所需字段"
+      ],
+      "inconclusive": [
+        "崩溃但没有稳定能力"
+      ]
+    },
+    "branches": [
+      "检查现有调用点，验证泄露基址，不预设必须 ROP"
+    ],
+    "capabilities": {
+      "binaries": [],
+      "modules": []
+    },
+    "operations": [
+      "pwn/elf"
+    ],
+    "sources": [
+      "https://github.com/hackthebox/cyber-apocalypse-2024/tree/main/pwn/%5BMedium%5D%20Death%20Note"
+    ],
+    "validation": "source-derived",
+    "license": "Repository-authored method description; linked source retains its own license."
+  },
+  {
+    "id": "method/representation-sample",
+    "version": "1.0.0",
+    "title": "用小样本还原数据表示",
+    "summary": "数据像索引、位置表、压缩结构或排列",
+    "tags": [
+      "reverse",
+      "compression",
+      "positions",
+      "endian",
+      "encoding",
+      "逆向",
+      "位置",
+      "编码"
+    ],
+    "triggers": [
+      "数据像索引、位置表、压缩结构或排列"
+    ],
+    "prerequisites": [
+      "能构造输入或检查编码逻辑"
+    ],
+    "exclusions": [
+      "必须核对边界、重复位置和字节序"
+    ],
+    "probe": "使用含重复与不同字符的短样本，比较每个字段如何随单个输入变化。",
+    "interpretation": {
+      "supports": [
+        "字段规律解释全部小样本并可逆"
+      ],
+      "contradicts": [
+        "重复或边界样本破坏假设"
+      ],
+      "inconclusive": [
+        "多个布局仍能解释少量样本"
+      ]
+    },
+    "branches": [
+      "增加区分样本；在完整数据上验证长度和覆盖"
+    ],
+    "capabilities": {
+      "binaries": [],
+      "modules": []
+    },
+    "operations": [],
+    "sources": [
+      "https://github.com/hackthebox/cyber-apocalypse-2024/tree/main/reversing/%5BEasy%5D%20Crushing"
+    ],
+    "validation": "source-derived",
+    "license": "Repository-authored method description; linked source retains its own license."
+  },
+  {
+    "id": "method/final-expression",
+    "version": "1.0.0",
+    "title": "分析过滤后的最终表达式",
+    "summary": "允许字符或函数受限，输入被拼接后解释",
+    "tags": [
+      "jail",
+      "eval",
+      "parser",
+      "suffix",
+      "comment",
+      "python",
+      "表达式",
+      "过滤"
+    ],
+    "triggers": [
+      "允许字符或函数受限，输入被拼接后解释"
+    ],
+    "prerequisites": [
+      "获得完整过滤与拼接顺序"
+    ],
+    "exclusions": [
+      "过滤通过不代表可编译或执行"
+    ],
+    "probe": "写出最终解释器收到的表达式；分别验证词法、编译和运行阶段允许的能力。",
+    "interpretation": {
+      "supports": [
+        "允许的能力足以实现题目目标"
+      ],
+      "contradicts": [
+        "最终表达式在关键阶段被拒绝"
+      ],
+      "inconclusive": [
+        "仅过滤器通过，没有运行结果"
+      ]
+    },
+    "branches": [
+      "寻找可用内建能力及后缀影响，保留实际环境语义"
+    ],
+    "capabilities": {
+      "binaries": [
+        "python3"
+      ],
+      "modules": []
+    },
+    "operations": [],
+    "sources": [
+      "https://github.com/hackthebox/cyber-apocalypse-2024/tree/main/misc/%5BEasy%5D%20Unbreakable"
+    ],
+    "validation": "source-derived",
+    "license": "Repository-authored method description; linked source retains its own license."
+  },
+  {
+    "id": "method/carrier-program",
+    "version": "1.0.0",
+    "title": "识别载体中的程序结构",
+    "summary": "目录树、颜色或顺序体现重复结构",
+    "tags": [
+      "misc",
+      "folders",
+      "color",
+      "tree",
+      "program",
+      "z3",
+      "目录",
+      "颜色",
+      "程序"
+    ],
+    "triggers": [
+      "目录树、颜色或顺序体现重复结构"
+    ],
+    "prerequisites": [
+      "保留载体的层次与顺序"
+    ],
+    "exclusions": [
+      "文件系统枚举顺序不一定是语言顺序"
+    ],
+    "probe": "将小部分载体映射为可能的语法或约束，并验证解释规则。",
+    "interpretation": {
+      "supports": [
+        "映射产生一致的程序行为或约束"
+      ],
+      "contradicts": [
+        "结构关系不符合候选语言"
+      ],
+      "inconclusive": [
+        "只能解出片段，顺序仍不明确"
+      ]
+    },
+    "branches": [
+      "先恢复程序，再求解约束；不要只做字符替换"
+    ],
+    "capabilities": {
+      "binaries": [
+        "python3"
+      ],
+      "modules": [
+        "z3"
+      ]
+    },
+    "operations": [],
+    "sources": [
+      "https://github.com/hackthebox/cyber-apocalypse-2024/tree/main/misc/%5BMedium%5D%20Colored%20Squares"
+    ],
+    "validation": "source-derived",
+    "license": "Repository-authored method description; linked source retains its own license."
+  },
+  {
+    "id": "method/independent-corroboration",
+    "version": "1.0.0",
+    "title": "用独立关系交叉验证候选",
+    "summary": "多个同名地点或相似候选",
+    "tags": [
+      "osint",
+      "location",
+      "landmark",
+      "relation",
+      "地理",
+      "独立",
+      "关系"
+    ],
+    "triggers": [
+      "多个同名地点或相似候选"
+    ],
+    "prerequisites": [
+      "具有可独立核对的空间或时间关系"
+    ],
+    "exclusions": [
+      "搜索排序和多个转载来源不构成独立证据"
+    ],
+    "probe": "针对一个候选核对至少两条不同来源的关系，主动寻找冲突。",
+    "interpretation": {
+      "supports": [
+        "独立关系一致且排除主要替代候选"
+      ],
+      "contradicts": [
+        "任一关键关系矛盾"
+      ],
+      "inconclusive": [
+        "只有相似图片或重复引用"
+      ]
+    },
+    "branches": [
+      "保留来源和不确定性；需要联网时明确当前能力限制"
+    ],
+    "capabilities": {
+      "binaries": [],
+      "modules": []
+    },
+    "operations": [],
+    "sources": [
+      "https://cryptocat.me/blog/ctf/2024/intigriti/osint/trackdown2/"
+    ],
+    "validation": "source-derived",
+    "license": "Repository-authored method description; linked source retains its own license."
+  },
+  {
+    "id": "method/integer-semantics",
+    "version": "1.0.0",
+    "title": "区分数值、位模式与转换语义",
+    "summary": "显式转换、截断或符号变化影响检查",
+    "tags": [
+      "blockchain",
+      "solidity",
+      "integer",
+      "signed",
+      "unsigned",
+      "overflow",
+      "类型",
+      "整数",
+      "溢出"
+    ],
+    "triggers": [
+      "显式转换、截断或符号变化影响检查"
+    ],
+    "prerequisites": [
+      "确认编译器版本、类型宽度和运算顺序"
+    ],
+    "exclusions": [
+      "不能把新版本检查规则套用到旧版本"
+    ],
+    "probe": "在同版本的小样本中计算转换前后数值与位模式，检查边界输入。",
+    "interpretation": {
+      "supports": [
+        "转换导致与业务约束不同的状态"
+      ],
+      "contradicts": [
+        "检查或类型范围阻止目标变化"
+      ],
+      "inconclusive": [
+        "只有数学推导，未确认运行时语义"
+      ]
+    },
+    "branches": [
+      "回到原状态检查器验证副作用"
+    ],
+    "capabilities": {
+      "binaries": [],
+      "modules": []
+    },
+    "operations": [],
+    "sources": [
+      "https://tkh4ck.github.io/ctf/2024/htb-cyber-apocalypse/blockchain/Lucky-Faucet/"
+    ],
+    "validation": "source-derived",
+    "license": "Repository-authored method description; linked source retains its own license."
+  },
+  {
+    "id": "method/hidden-state-space",
+    "version": "1.0.0",
+    "title": "按规格检查遗漏状态与区域",
+    "summary": "常规区域为空，但设备或格式有额外模式",
+    "tags": [
+      "hardware",
+      "eeprom",
+      "specification",
+      "region",
+      "mode",
+      "硬件",
+      "规格",
+      "区域",
+      "状态"
+    ],
+    "triggers": [
+      "常规区域为空，但设备或格式有额外模式"
+    ],
+    "prerequisites": [
+      "有对应型号的规格或实现说明"
+    ],
+    "exclusions": [
+      "不把资料中的电压和接线直接迁移到真实设备"
+    ],
+    "probe": "列出文档中的区域、模式与访问条件；优先检查离线转储是否覆盖这些区域。",
+    "interpretation": {
+      "supports": [
+        "额外区域包含可验证数据"
+      ],
+      "contradicts": [
+        "完整覆盖后未发现目标数据"
+      ],
+      "inconclusive": [
+        "转储范围或模式不明"
+      ]
+    },
+    "branches": [
+      "说明未覆盖范围；真实硬件操作由操作者按设备条件处理"
+    ],
+    "capabilities": {
+      "binaries": [],
+      "modules": []
+    },
+    "operations": [],
+    "sources": [
+      "https://github.com/hackthebox/cyber-apocalypse-2024/tree/main/hw/The%20PROM%20%5BMedium%5D"
+    ],
+    "validation": "source-derived",
+    "license": "Repository-authored method description; linked source retains its own license."
+  }
+]
