@@ -82,7 +82,8 @@ def main() -> None:
                     require(result.status == "cancelled", f"unexpected cancellation: {result.status}")
                 else:
                     # Shorten only this smoke's watchdog, retaining the real PTY,
-                    # Docker daemon, callbacks and container-kill path. Production
+                    # Docker daemon and callbacks. Timeout cleanup should retire
+                    # this session; finally removes the run container. Production
                     # limits remain 60 seconds idle and 600 seconds total.
                     session = runtime._interactive(session_id)
                     with session._condition:

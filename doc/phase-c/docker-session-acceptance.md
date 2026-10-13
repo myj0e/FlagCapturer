@@ -38,13 +38,15 @@ container was removed before building the dedicated image above.
 | --- | --- |
 | PTY and two input/output rounds | Both container streams were terminals; both replies reached the reader and output callback; EOF closed the process. |
 | Cancellation | Session reported `cancelled`; container was removed. |
-| Idle watchdog | Session reported `idle_timeout` with `timed_out=true`; container was removed. |
-| Total watchdog | Session reported `total_timeout` with `timed_out=true`; container was removed. |
+| Idle watchdog | Session reported `idle_timeout` with `timed_out=true`; EOF/interrupt cleanup retired the session and left the shared container available until run cleanup. |
+| Total watchdog | Session reported `total_timeout` with `timed_out=true`; EOF/interrupt cleanup retired the session and left the shared container available until run cleanup. |
 
 The harness shortens each watchdog to 0.5 seconds using the session's internal
 condition. Production limits remain 60 seconds idle and 600 seconds total. Each
 case uses a separate offline container, closes it in `finally`, and checks absence
 with a successful Docker container-list request. A daemon error fails acceptance.
+Timeout cleanup first sends EOF and interrupt to the timed-out process; the harness
+then closes the remaining run container during its `finally` cleanup.
 The transcript callback is checked in memory; existing synthetic integration
 tests cover its persistence through tool events and reports.
 

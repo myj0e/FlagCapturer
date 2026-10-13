@@ -22,7 +22,7 @@ class InteractiveReadResult:
 
 
 class InteractiveSession:
-    """Read output continuously, cap its transcript, and enforce idle/total time."""
+    """Drain output continuously, bound retained output, and enforce idle/total time."""
 
     def __init__(
         self,
@@ -40,7 +40,10 @@ class InteractiveSession:
         self.process = process
         self.idle_timeout = idle_timeout
         self.total_timeout = total_timeout
+        if output_limit <= 0:
+            raise ValueError("session output retention limit must be positive")
         self.output_limit = output_limit
+        self._pending_limit = min(output_limit, 64 * 1024)
         self.on_output = on_output
         self.on_closed = on_closed
         self.on_force_close = on_force_close
@@ -50,12 +53,13 @@ class InteractiveSession:
         self._condition = threading.Condition()
         self._write_lock = threading.Lock()
         self._pending = bytearray()
-        self._received = 0
+        self._recorded = 0
         self._status = "running"
         self._exit_code: int | None = None
         self._timed_out = False
         self._truncated = False
         self._finished = False
+        self._timeout_override: tuple[str, bool] | None = None
         self._reader = threading.Thread(target=self._read_output, name=f"ctfbot-session-{session_id[:8]}", daemon=True)
         self._watchdog = threading.Thread(target=self._watch, name=f"ctfbot-session-watch-{session_id[:8]}", daemon=True)
         self._reader.start()
@@ -139,11 +143,10 @@ class InteractiveSession:
                     return
                 with self._condition:
                     self._last_output = time.monotonic()
-                    remaining = self.output_limit - self._received
-                    accepted = chunk[:max(0, remaining)]
-                    overflow = len(accepted) < len(chunk)
-                    self._received += len(accepted)
-                    if overflow:
+                    remaining = max(0, self.output_limit - self._recorded)
+                    accepted = chunk[:remaining]
+                    self._recorded += len(accepted)
+                    if len(accepted) < len(chunk):
                         self._truncated = True
                 if accepted:
                     try:
@@ -151,12 +154,16 @@ class InteractiveSession:
                     except Exception:
                         self._force("transcript_error", timed_out=False)
                         return
-                    with self._condition:
-                        self._pending.extend(accepted)
-                        self._condition.notify_all()
-                if overflow:
-                    self._force("output_limit", timed_out=False)
-                    return
+                with self._condition:
+                    # Keep draining even after the transcript budget is full. Retain a
+                    # bounded tail for later reads so chatty children cannot kill a run
+                    # or grow controller memory without bound.
+                    self._pending.extend(chunk)
+                    excess = len(self._pending) - self._pending_limit
+                    if excess > 0:
+                        del self._pending[:excess]
+                        self._truncated = True
+                    self._condition.notify_all()
         except (OSError, ValueError):
             self._finish("exited", self._confirmed_exit_code())
 
@@ -180,8 +187,19 @@ class InteractiveSession:
                 remaining = min(remaining_idle, remaining_total)
                 if remaining <= 0:
                     reason = "idle_timeout" if remaining_idle <= remaining_total else "total_timeout"
+                    self._timeout_override = (reason, True)
+                    self._condition.notify_all()
                     break
                 self._condition.wait(min(remaining, 0.5))
+        # A session timeout should retire this process without immediately
+        # tearing down the shared run container. Try terminal EOF and interrupt
+        # first; kill the container only when the session ignores both.
+        self._write_control(b"\x04")
+        if self._wait(0.5, status=reason, timed_out=True):
+            return
+        self._write_control(b"\x03")
+        if self._wait(1.0, status=reason, timed_out=True):
+            return
         self._force(reason, timed_out=True)
 
     def _write_control(self, data: bytes) -> None:
@@ -195,7 +213,7 @@ class InteractiveSession:
         except (BrokenPipeError, OSError, ValueError):
             pass
 
-    def _wait(self, timeout: float) -> bool:
+    def _wait(self, timeout: float, *, status: str = "closed", timed_out: bool = False) -> bool:
         try:
             self.process.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
@@ -203,7 +221,7 @@ class InteractiveSession:
         except (OSError, ValueError):
             return self.process.poll() is not None
         self._reader.join(timeout=1)
-        self._finish("closed", self.process.returncode)
+        self._finish(status, self.process.returncode, timed_out=timed_out)
         return True
 
     def _force(self, status: str, *, timed_out: bool, kill_container: bool = True) -> None:
@@ -231,12 +249,15 @@ class InteractiveSession:
             self._close_streams()
             self._notify_closed(status, self.process.returncode)
 
-    def _finish(self, status: str, exit_code: int | None) -> None:
+    def _finish(self, status: str, exit_code: int | None, *, timed_out: bool = False) -> None:
         with self._condition:
             if self._finished:
                 return
+            if self._timeout_override is not None and status in {"closed", "exited"}:
+                status, timed_out = self._timeout_override
             self._status = status
             self._exit_code = exit_code
+            self._timed_out = timed_out
             self._finished = True
             self._condition.notify_all()
         self._close_streams()
