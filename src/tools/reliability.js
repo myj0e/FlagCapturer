@@ -180,6 +180,18 @@ print(json.dumps({'passed':passed}))`;
       controller_proven: false
     });
   });
+  define('route_review_record', 'Compatibility tool for an existing historical pending route review. New tasks use periodic state summaries; there is no mandatory review ceremony.', s.object({
+    review_id: s.text(100), assumptions: strings(), evidence_gaps: strings(), decision: s.enum(['continue', 'pivot', 'blocked']),
+    rationale: s.text(2048, { minLength: 1 }), next_action: s.text(2048, { minLength: 1 }), observation_ids: refs()
+  }), async args => {
+    const review = state.select('route_reviews', [args.review_id])[0];
+    invariant(review.status === 'pending', 'Expected a pending route review');
+    invariant(![...state.sections.route_reviews.values()].some(r => r.resolves === review.id), 'Route review already resolved');
+    state.select('observations', args.observation_ids);
+    return state.add('route_reviews', { ...args, resolves: review.id, status: 'resolved',
+      execution_count: [...state.sections.observations.values()].filter(o => ['command_run', 'script_run', 'script_start', 'tool_exec', 'workflow_run'].includes(o.tool)).length,
+      candidate_count: state.sections.candidates.size, supported_count: [...state.sections.claims.values()].filter(c => c.state === 'supported').length });
+  });
   define('run_complete', 'Save mandatory Markdown writeup and finish explicitly. completed includes every submitted flag and no unresolved work; partial lists actual unfinished subtasks.', s.object({
     outcome: s.enum(['completed', 'partial', 'unsolved', 'candidate_unverified']),
     candidate_ids: refs(),

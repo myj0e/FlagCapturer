@@ -64,11 +64,13 @@ node src/cli.js solve data/imports/<snapshot> \
 
 单文件或仅含一个文件的目录均可导入，单附件 1 byte..32 MiB。未授权时仍可导入和预览。运行前再次校验任务及所有附件的哈希，并复制到独立运行快照。旧 admitted/static_files_only workspace 的 TASK.md、provenance.json、input 可直接预览和运行，授权依据必须仍有效。传 `--image` 可覆盖默认 `ctfbot-tools:candidate`；镜像仅做本地 inspect。
 
-直接 `npm start` 打开工作台：`/login` → `/model` → `/thinking` → `/import <路径>` → `/run`。支持 API key、服务提供的 OAuth 和 `/endpoint` 自定义兼容 API，配置复用 Pi 认证。运行时 `/stop` 或 Ctrl+C 停止，`/state` 查看状态，`/flags` 查看完整候选，其他文字作为 steering 输入。公开说明、服务实际返回的思考文本和工具事件分区实时显示；不显示思考签名或服务未返回的隐藏内容。终端显示过滤控制字符，候选原始字节仍保留在证据中。没有整题轮次、token、总时长限额；单次命令 120 秒，后台进程最多 30 分钟、16 MiB 输出，最多 8 个并发会话。后台会话为管道，不是 PTY。主动 `session_close` 返回 closed，保留实际退出码；不会把主动终止误报为工具失败。
+直接 `npm start` 打开工作台：`/login` → `/model` → `/thinking` → `/import <路径>` → `/run`。支持 API key、服务提供的 OAuth 和 `/endpoint` 自定义兼容 API，配置复用 Pi 认证。运行时 `/stop` 或 Ctrl+C 停止，`/state` 查看状态，`/flags` 查看完整候选，其他文字作为 steering 输入。公开说明和工具事件实时显示；服务返回的思考按回复合并并默认折叠，F4 展开、/thoughts 阅读；不显示思考签名或服务未返回的隐藏内容。终端显示过滤控制字符，候选原始字节仍保留在证据中。没有整题轮次、token、总时长限额；单次命令 120 秒，后台进程最多 30 分钟、16 MiB 输出，最多 8 个并发会话。后台会话为管道，不是 PTY。主动 `session_close` 返回 closed，保留实际退出码；不会把主动终止误报为工具失败。
 
 Flag 提交不检查格式或比赛平台接受情况。每个 Flag 提交后继续实际剩余子题；完成必须包含所有候选 ID 和 agent 编写的 writeup。completed 退出 0；partial/unsolved/错误退出 1；手动停止退出 130。Pi 压缩可能额外使用模型额度，与旧实现的无模型快照方案不同。
 
 ## 证据、恢复和评测
+
+工作台 `/resume` 选择已停止或失败的记录，恢复 Pi 会话、RunState 和已保存产物后继续解题。每次续接使用原镜像并创建新记录，不自动重放历史命令。生成依赖、总结中的恢复路径和边界见 [resume.md](docs/resume.md)。
 
 ```sh
 node src/cli.js events runs/<run-id>
@@ -76,6 +78,7 @@ node src/cli.js audit runs/<run-id>
 node src/cli.js diagnose-run runs/<run-id>
 node src/cli.js report runs/<run-id>
 node src/cli.js recover runs/<run-id>
+node src/cli.js resume runs/<run-id> --confirm-model-usage
 node src/cli.js replay runs/<run-id> --confirm-execution
 node src/cli.js evaluate ./dataset.json \
   --provider <provider> --model <model> --confirm-model-usage \
@@ -89,3 +92,5 @@ node src/cli.js evaluate ./dataset.json \
 ## 当前验证边界
 
 继续开发后，80 项普通测试、13 项集成测试及模块检查通过。测试覆盖真实 Pi + Docker 合成解题、自动上下文压缩后状态恢复、多模态 provider 边界的图片传递、运行中 Stop、立即关闭交互会话、工作流、超时、输出限制、TCP 断流与取消、本地服务授权到期、回放和恢复清理，没有发送真实模型请求。详见 [开发验收记录](docs/development-validation.md)；依赖准备与权限边界见 [权限准备记录](docs/permission-preparation.md)。真实收费 provider、其图片协议序列化、真实比赛远端与解题率尚未验收。
+
+支持 Pi 原生 Skills：`/skills` 查看，`/skill:ctf-forensics` 显式选用。已吸收固定版本的 [ljagiello/ctf-skills](https://github.com/ljagiello/ctf-skills) 分类知识，并适配沙箱和证据机制；不会执行上游全量安装器。CLI 可用 `--skill <name>`、`--skill-path <directory>`。详见 [Skills 说明](docs/skills.md)。

@@ -1,11 +1,14 @@
-import { assistantBlocks, assistantDelta } from './assistant-output.js';
+import { discoverSkills } from '../skills/catalog.js';
+import { loadSdk } from '../pi/sdk.js';
+import { assistantBlocks, assistantDelta, ThinkingBuffer } from './assistant-output.js';
 import { basename, resolve, join } from 'node:path';
 import { access, stat } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { TuiAltScreen, ProcessTerminal, matchesKey, getKeybindings, isKeyRelease } from '@earendil-works/pi-tui';
 import { ModelCatalog } from '../pi/catalog.js';
-import { authenticationErrorMessage } from '../pi/auth-errors.js';
+import { authenticationErrorMessage, safeModelError } from '../pi/auth-errors.js';
 import { solve } from '../application/solve.js';
+import { inspectResume, listResumable } from '../application/resume.js';
 import { importFile, preview } from '../challenge/workspace.js';
 import { report } from '../application/report.js';
 import { readRegular, invariant } from '../util.js';
@@ -14,8 +17,8 @@ import { ToolActivity, toolCardText, provisioningText } from './activity.js';
 import { WorkbenchView, clean } from './workbench-view.js';
 import { openBrowser } from './browser.js';
 import { createWorkbenchAutocomplete, findFd, pathArgument } from './autocomplete.js';
-export const COMMANDS = [['menu', '打开操作菜单'], ['login', '配置 API key 或登录服务'], ['model', '选择服务与模型'], ['thinking', '选择思考强度'], ['import', '导入附件或打开 workspace'], ['run', '开始解题'], ['stop', '停止并清理当前运行'], ['summary', '阅读完整解题进展'], ['state', '查看业务状态'], ['flags', '查看全部候选'], ['writeup', '阅读解题报告'], ['report', '生成并阅读运行报告'], ['endpoint', '添加自定义 API'], ['image', '选择本地工具镜像'], ['network', '设置网络授权文件 / off'], ['memory', '设置受审记忆 / off'], ['logout', '移除服务的已保存凭据'], ['help', '查看操作说明'], ['quit', '退出工作台']];
-const HELP = `配置：/login [provider] [oauth|api_key] → /model → /thinking\n题目：/import <附件或 workspace 路径> → /run\n\n输入普通文字保存补充要求；运行时直接发送给 agent。Enter 发送，Shift+Enter 换行。/ 指令补全，Tab 接受，↑↓ 选择，Esc 关闭；路径与 @ 引用支持文件补全。\nCtrl+P 打开菜单，F3 切换日志与摘要浏览（窄屏打开全文），PgUp/PgDn 翻页，Ctrl+C 停止当前操作；空闲时退出。\n\n/run 会再次确认题目、模型和数据发送授权。/stop 会等待进程与容器清理。\n运行中可以改变思考强度，更换模型或登录服务需要先停止。\n\n/state [section] [id|latest] 查看状态、产物和实验，/flags 查看候选；/writeup、/report 在终端内阅读结果。\n/endpoint 添加兼容 API；也会发现已有 Pi models.json 的自定义服务。\n\n${COMMANDS.map(([name, description]) => `/${name}  ${description}`).join('\n')}`;
+export const COMMANDS = [['skills', '查看可用 Skill'], ['menu', '打开操作菜单'], ['login', '配置 API key 或登录服务'], ['model', '选择服务与模型'], ['thinking', '选择思考强度'], ['thoughts', '查看思考原文 [编号]'], ['import', '导入附件或打开 workspace'], ['run', '开始解题'], ['resume', '选择记录，恢复解题'], ['stop', '停止、保存续接记录并清理'], ['summary', '阅读完整解题进展'], ['state', '查看业务状态'], ['flags', '查看全部候选'], ['writeup', '阅读解题报告'], ['report', '生成并阅读运行报告'], ['endpoint', '添加自定义 API'], ['image', '选择本地工具镜像'], ['network', '设置网络授权文件 / off'], ['memory', '设置受审记忆 / off'], ['logout', '移除服务的已保存凭据'], ['help', '查看操作说明'], ['quit', '退出工作台']];
+const HELP = `配置：/login [provider] [oauth|api_key] → /model → /thinking\n题目：/import <附件或 workspace 路径> → /run\n\n/skills 查看指南，/skill:名称 [要求] 显式使用；空闲时选择下次运行的 Skill。\n输入普通文字保存补充要求；运行时直接发送给 agent。Enter 发送，Shift+Enter 换行。/ 指令补全，Tab 接受，↑↓ 选择，Esc 关闭；路径与 @ 引用支持文件补全。\nCtrl+P 打开菜单，F4 展开/折叠思考；/thoughts [编号] 阅读原文。F3 切换日志与摘要浏览（窄屏打开全文），PgUp/PgDn 翻页，Ctrl+C 停止当前操作；空闲时退出。\n\n/run 会再次确认题目、模型和数据发送授权。/stop 会等待进程与容器清理。\n运行中可以改变思考强度，更换模型或登录服务需要先停止。\n\n/state [section] [id|latest] 查看状态、产物和实验，/flags 查看候选；/writeup、/report 在终端内阅读结果。\n/endpoint 添加兼容 API；也会发现已有 Pi models.json 的自定义服务。\n\n${COMMANDS.map(([name, description]) => `/${name}  ${description}`).join('\n')}`;
 
 /** Coordinates the UI with application services; never implements an agent loop. */
 export class Workbench {
@@ -98,7 +101,7 @@ export class Workbench {
       this.view.editor.addToHistory(text);
       if (this.active) {
         if (!this.controls) return this.view.log('提示', '运行正在准备，请稍后补充线索。');
-        Promise.resolve(this.controls.steer(text)).then(() => this.view.log('你', text)).catch(error => this.error(error));
+        Promise.resolve(this.controls.steer(text)).then(() => this.view.log('你 · 已排队', text)).catch(error => this.error(error));
       } else {
         this.guidance = text;
         this.view.log('你', text);
@@ -117,9 +120,35 @@ export class Workbench {
   idle() {
     invariant(!this.active, '请先 /stop，等待清理后再更换题目、服务或模型');
   }
+  async availableSkills() {
+    if (this.controls && this.active && this.controls.skills) return this.controls.skills();
+    this.skillDiscovery ??= loadSdk().then(sdk => discoverSkills(sdk, { skillPaths: this.options.skillPaths, userDirectory: this.options.skillUserDirectory })).then(result => ({
+      skills: result.skills.map(s => ({ name: s.name, description: s.description, file: s.filePath, explicit_only: s.disableModelInvocation })),
+      diagnostics: result.diagnostics
+    })).catch(error => { this.skillDiscovery = null; throw error; });
+    return this.skillDiscovery;
+  }
   async dispatch(command, arg) {
     if (this.closing) return;
+    if (command.startsWith('skill:')) {
+      const name = command.slice(6);
+      invariant((await this.availableSkills()).skills.some(s => s.name === name), '未知 Skill，使用 /skills 查看');
+      if (this.active) {
+        invariant(this.controls, '运行正在准备，请稍后调用 Skill');
+        await this.controls.steer(`/skill:${name}${arg ? ' ' + arg : ''}`);
+        this.view.log('Skill', `${name} 已排队，将在当前模型轮次结束后送入`);
+      } else {
+        this.options.initialSkill = name;
+        if (arg) this.guidance = [this.guidance, arg].filter(Boolean).join('\n');
+        this.view.log('Skill', `下次 /run 使用 ${name}`);
+      }
+      return;
+    }
     switch (command) {
+      case 'skills': {
+        const result = await this.availableSkills();
+        return this.view.showDocument('可用 Skills', result.skills.map(s => `/${'skill:'}${s.name}${s.explicit_only ? '（仅显式调用）' : ''}\n${s.description}\n来源：${s.file}`).join('\n\n') + (result.diagnostics?.length ? '\n\n加载提示：\n' + result.diagnostics.map(d => d.message).join('\n') : ''));
+      }
       case 'help':
         return this.view.showDocument('操作说明', HELP);
       case 'menu':
@@ -154,6 +183,16 @@ export class Workbench {
         return this.openChallenge(arg);
       case 'run':
         return this.run();
+      case 'resume':
+        this.idle();
+        return this.resume(arg);
+      case 'thoughts': {
+        invariant(!arg || /^\d+$/.test(arg), '用法：/thoughts [编号]');
+        const thoughts = this.view.entries.filter(entry => entry.kind === '思考');
+        const entry = arg ? thoughts.find(entry => entry.thinkingIndex === Number(arg)) : thoughts.at(-1);
+        invariant(entry, '没有可查看的思考记录；旧记录可能已移出界面缓存');
+        return this.view.showDocument(`模型思考 #${entry.thinkingIndex}（服务返回，不代表工具执行）`, entry.text || '尚未收到思考正文');
+      }
       case 'summary':
         this.poll();
         return this.view.showDocument('解题进展', summaryDocument(this.view.state));
@@ -457,6 +496,7 @@ export class Workbench {
         id: 'yes',
         label: '授权向所选模型发送附件和工具输出'
       }], {
+        confirmation: true,
         detail: resolve(source)
       });
       const basis = consent === 'yes' ? '工作台中用户明确授权本题附件和工具输出发送给所选模型' : '';
@@ -477,21 +517,43 @@ export class Workbench {
     });
     this.view.log('题目', `${checked.root}\n${checked.manifest.files.map(file => `${file.path} · ${file.bytes} bytes`).join('\n')}\n模型传输：${checked.authorized ? '已授权' : '未授权'}`);
   }
-  async run() {
+  async resume(arg) {
+    let directory = arg && (/^[a-f0-9-]{36}$/.test(arg) ? join(this.options.runsRoot, arg) : pathArgument(arg));
+    if (!directory) {
+      const records = await listResumable(this.options.runsRoot);
+      invariant(records.length, '没有可续接的任务记录');
+      directory = await this.view.choose('续接解题记录', records.map(record => ({ id: record.root,
+        label: `${record.task} · ${record.status}`, description: `${record.time} · ${record.id}` })));
+      if (!directory) return;
+    }
+    const saved = await inspectResume(directory);
+    this.workspace = await this.previewChallenge(saved.workspace, { requireAuthorization: true });
+    if (!this.model) {
+      this.options.provider = saved.selection.provider;
+      this.options.model = saved.selection.model;
+      this.options.thinkingLevel = saved.selection.thinkingLevel;
+      this.refreshSelection();
+    }
+    this.view.state.challenge = basename(saved.root);
+    this.view.state.consent = this.workspace.authorized;
+    return this.run({ resumeFrom: saved.root, image: saved.started.identity.image });
+  }
+  async run(resumeOptions = {}) {
     this.idle();
     invariant(this.workspace, '请先 /import 导入题目');
     invariant(this.workspace.authorized, '此 workspace 尚未授权模型传输，请重新导入并明确授权');
     invariant(this.model, '请先 /model 选择模型');
     const configured = this.catalog.runtime.getProviderAuthStatus(this.model.provider).configured;
     invariant(configured, '此服务尚未配置认证，请先 /login');
-    const answer = await this.view.choose('开始本次解题', [{
+    const answer = await this.view.choose(resumeOptions.resumeFrom ? '续接本次解题' : '开始本次解题', [{
       id: 'no',
       label: '返回'
     }, {
       id: 'yes',
       label: '开始，允许使用模型额度'
     }], {
-      detail: `题目：${this.workspace.root}\n模型：${this.model.provider}/${this.model.id}\nAPI：${this.model.baseUrl}\n思考：${this.options.thinkingLevel}\n附件与工具输出将发送给该服务。`
+      confirmation: true,
+      detail: `题目：${this.workspace.root}\n模型：${this.model.provider}/${this.model.id}\nAPI：${this.model.baseUrl}\n思考：${this.options.thinkingLevel}\n${resumeOptions.resumeFrom ? '续接：恢复已保存会话与文件；旧进程不恢复，当前网络授权重新校验。\n' : ''}附件与工具输出将发送给该服务。`
     });
     if (answer !== 'yes') return;
     const controller = new AbortController();
@@ -507,6 +569,7 @@ export class Workbench {
       elapsed: 0,
       runDir: '',
       usage: undefined,
+      contextMaintenance: undefined,
       context: undefined
     });
     this.view.state.progress = { task: this.workspace.task };
@@ -516,12 +579,13 @@ export class Workbench {
     this.view.summaryFocused = false;
     this.toolActivity.reset();
     const timer = setInterval(() => this.poll(started), 500);
-    this.active = Promise.resolve().then(() => this.executeRun(controller, timer));
+    this.active = Promise.resolve().then(() => this.executeRun(controller, timer, resumeOptions));
   }
-  async executeRun(controller, timer) {
+  async executeRun(controller, timer, resumeOptions = {}) {
     try {
       this.result = await this.solveRun({
         ...this.options,
+        ...resumeOptions,
         workspace: this.workspace.root,
         additionalPrompt: this.guidance,
         confirmModelUsage: true,
@@ -557,6 +621,7 @@ export class Workbench {
         this.view.state.progress = this.controls.progress?.();
         const stats = this.controls.stats();
         this.view.state.usage = stats.usage;
+        if (stats.maintenance) this.view.state.contextMaintenance = stats.maintenance;
         this.view.state.context = this.contextSelection === `${this.options.provider}/${this.options.model}` ? stats.context : undefined;
       } catch {}
     }
@@ -572,22 +637,58 @@ export class Workbench {
       entry.presentation = 'tool';
     }
   }
+  thinking(delta) {
+    if (!this.thinkingMessage) {
+      const entry = this.view.log('思考', '');
+      Object.assign(entry, { thinkingIndex: ++this.view.thinkingIndex, thinkingPending: true, thinkingCount: 0 });
+      this.thinkingMessage = { entry, buffer: new ThinkingBuffer() };
+    }
+    const { entry, buffer } = this.thinkingMessage;
+    if (delta) buffer.add(delta.index, delta.text);
+    entry.text = clean(buffer.text);
+    entry.thinkingCount = buffer.count;
+    return this.thinkingMessage;
+  }
+  finishThinking(message, interrupted = false) {
+    const blocks = assistantBlocks(message).filter(block => block.kind === '思考');
+    if (blocks.length || this.thinkingMessage) {
+      const { entry, buffer } = this.thinking();
+      if (blocks.length) buffer.replace(blocks);
+      Object.assign(entry, { text: clean(buffer.text), thinkingCount: buffer.count, thinkingPending: false, thinkingInterrupted: interrupted });
+    }
+    this.thinkingMessage = null;
+  }
   event(event) {
     if (event.type === 'run_started') {
       this.view.state.runDir = event.run_dir;
       this.view.state.status = '解题中';
       this.view.log('运行', `开始解题 · ${event.run_id ?? ''}\n证据：${event.run_dir}`);
+    } else if (event.type === 'user_input_delivered') {
+      this.view.log('补充', '已送入模型，将在下一次推理中处理');
+    } else if (event.type === 'skills_ready') {
+      this.view.log('Skills', `已${event.restored ? '恢复记录中的' : '加载'} ${event.count} 个指南（正文按需读取）${event.diagnostics?.length ? '\n' + event.diagnostics.map(d => d.message).join('\n') : ''}`);
+    } else if (event.type === 'skill_loaded') {
+      this.view.log('Skill', `使用 ${event.name}${event.truncated ? ' · 参考正文尚有后续内容' : ''}`);
+    } else if (event.type === 'route_review_required') {
+      this.view.log('路线复核', event.reason);
     } else if (event.type === 'tool_provisioning') {
       this.view.log('工具准备', provisioningText(event));
+    } else if (event.type === 'run_resumed') {
+      this.view.log('恢复', `已续接 ${event.parent_run_id}\n恢复 ${event.restored_files} 个文件位置 · 待处理 ${event.unresolved} 项\n历史进程与工具环境需要重新创建。`);
     } else if (event.type === 'context_refresh_start') {
-      this.view.state.currentActivity = { id: 'context-refresh', purpose: '整理当前状态与核心参考' };
+      if (!event.background) this.view.state.currentActivity = { id: 'context-refresh', purpose: '整理当前状态与核心参考' };
+      this.view.log('状态整理', event.background ? `后台更新进展与恢复路径（覆盖至第 ${event.sourceTurn} 轮），解题继续` : '开始更新进展与恢复路径');
+    } else if (event.type === 'context_summary_repair') {
+      this.view.log('状态整理', `${event.reason}，正在修复（${event.attempt}/${event.maxAttempts}）${event.kind === 'compaction' ? ' · 历史压缩' : ''}`);
     } else if (event.type === 'context_refresh_end') {
       if (this.view.state.currentActivity?.id === 'context-refresh') this.view.state.currentActivity = null;
-      if (event.errorMessage) this.view.log('上下文', event.errorMessage);
+      this.view.log('状态整理', event.errorMessage ?? `已更新：进展摘要、核心参考、恢复路径${event.warnings?.length ? '\n' + event.warnings.map(warning => warning.message).join('\n') : ''}`);
     } else if (event.type === 'message_start' && event.message?.role === 'assistant') {
+      this.finishThinking(undefined, true);
       this.assistantEntries = new Map();
     } else if (assistantDelta(event)) {
       const delta = assistantDelta(event);
+      if (delta.kind === '思考') { this.thinking(delta); this.view.trim(); this.poll(); return; }
       this.assistantEntries ??= new Map();
       let entry = this.assistantEntries.get(delta.index);
       if (!entry || !this.view.entries.includes(entry)) {
@@ -596,13 +697,15 @@ export class Workbench {
       }
       entry.text = (entry.text + clean(delta.text)).slice(-32768);
     } else if (event.type === 'message_end' && event.message?.role === 'assistant') {
-      for (const block of assistantBlocks(event.message)) {
+      this.finishThinking(event.message, ['error', 'aborted'].includes(event.message.stopReason));
+      for (const block of assistantBlocks(event.message).filter(block => block.kind === 'Agent')) {
         const entry = this.assistantEntries?.get(block.index) ?? this.assistantEntries?.get(block.kind);
         if (entry && this.view.entries.includes(entry)) entry.text = clean(block.text).slice(-32768);
         else this.view.log(block.kind, block.text);
       }
       this.assistantEntries = new Map();
     } else if (event.type === 'tool_execution_start') {
+      this.finishThinking();
       this.assistantEntries = new Map();
       this.view.state.tools++;
       const activity = this.toolActivity.start(event);
@@ -615,9 +718,10 @@ export class Workbench {
       this.view.state.latestActivity = { purpose: activity.purpose, status: activity.status };
       if (this.view.state.currentActivity?.id === event.toolCallId) this.view.state.currentActivity = null;
     } else if (event.type === 'run_finished') {
+      this.finishThinking(undefined, true);
       this.view.state.currentActivity = null;
       for (const activity of this.toolActivity.interrupt(event.status === 'cancelled' ? '已取消' : '已中断')) this.updateToolCard(activity);
-    } else if (event.type === 'compaction_start') this.view.log('上下文', '正在压缩历史，业务状态和证据继续保留');else if (event.type === 'compaction_end') this.view.log('上下文', event.errorMessage ? '压缩失败：' + event.errorMessage : '压缩结束');else if (event.type === 'auto_retry_start') this.view.log('重试', `第 ${event.attempt}/${event.maxAttempts} 次`);else if (event.type === 'extension_error') this.view.log('错误', 'Pi 扩展发生错误，请查看运行证据');
+    } else if (event.type === 'compaction_start') this.view.log('上下文', '正在压缩历史，业务状态和证据继续保留');else if (event.type === 'compaction_end') this.view.log('上下文', event.errorMessage ? '压缩失败：' + event.errorMessage : '压缩结束');else if (event.type === 'auto_retry_start') this.view.log('重试', `第 ${event.attempt}/${event.maxAttempts} 次${event.errorMessage ? '\n原因：' + safeModelError(event.errorMessage) : ''}`);else if (event.type === 'extension_error') this.view.log('错误', 'Pi 扩展发生错误，请查看运行证据');
     this.view.trim();
     this.poll();
   }
@@ -718,6 +822,10 @@ export async function startWorkbench(options = {}, dependencies = {}) {
       return {
         consume: true
       };
+    }
+    if (!view.modal && matchesKey(data, 'f4')) {
+      view.toggleThinking();
+      return { consume: true };
     }
     if (!view.modal && matchesKey(data, 'f3')) {
       if (terminal.columns < 110) app.submit('/summary');

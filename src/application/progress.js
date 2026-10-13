@@ -32,8 +32,9 @@ export function createProgressReader(state, { task, knowledge = new Map() } = {}
     const summaries = [...state.sections.summaries.values()];
     const publicSummary = summaries.at(-1) ?? null;
     const managed = [...state.sections.context_snapshots.values()].at(-1);
-    const summary = managed && (!publicSummary || managed.state_revision > (publicSummary.state_revision ?? 0))
-      ? { ...managed.public_summary, id: managed.id, time: managed.time, observation_count: managed.observation_count } : publicSummary;
+    const summary = managed && (!publicSummary || summarySourceRevision(managed) >= summarySourceRevision(publicSummary))
+      ? { ...managed.public_summary, id: managed.id, time: managed.time, source_time: managed.source_time, generated_time: managed.generated_time,
+        source_turn: managed.source_turn, observation_count: managed.observation_count } : publicSummary;
     const observations = [...state.sections.observations.values()];
     const afterSummary = summary?.observation_count !== undefined ? observations.slice(summary.observation_count) : observations.filter(o => !summary || o.time > summary.time);
     const claims = [...state.sections.claims.values()];
@@ -42,6 +43,8 @@ export function createProgressReader(state, { task, knowledge = new Map() } = {}
     const derived = assets.filter(a => a.origin !== 'input');
     cached = {
       task, revision: state.revision, summary,
+      skills: [...state.sections.skill_uses.values()].slice(-3).map(r => ({ resource: r.resource, sha256: r.sha256 })),
+      route_review: state.sections.route_reviews.size ? { ...[...state.sections.route_reviews.values()].at(-1), historical_only: true } : null,
       tool_environments: [...new Map([...(state.sections.tool_environments?.values() ?? [])].map(x => [x.preparation_id, x])).values()].slice(-8),
       summary_pending: Boolean(summary && afterSummary.some(o => meaningfulTools.has(o.tool))),
       claims: claims.filter(c => !superseded.has(c.id)).slice(-8).map(c => ({ statement: c.statement, state: c.state })),
@@ -60,3 +63,5 @@ export function createProgressReader(state, { task, knowledge = new Map() } = {}
     return cached;
   };
 }
+// Persistence may happen long after the evidence cut of a background summary.
+export function summarySourceRevision(record) { return record?.source_revision ?? record?.state_revision ?? 0; }

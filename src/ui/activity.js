@@ -19,6 +19,7 @@ const purposes = {
   command_run: '在沙箱中执行命令', session_start: '启动后台或交互进程', session_send: '向交互进程发送数据', session_read: '收集后台进程输出', session_close: '结束后台进程',
   script_save: '保存可复现的分析脚本', script_run: '运行已保存脚本', script_start: '后台运行已保存脚本',
   workflow_discover: '查看可用方法和题型线索', workflow_search: '根据线索查找解题方法', workflow_read: '阅读方法的前提与验证步骤', workflow_environment: '检查工具、模块与版本', workflow_run: '执行工作流实验',
+  skill_list: '查看可用解题指南', skill_read: '读取解题指南', skill_materialize: '准备指南中的脚本', route_review_record: '记录路线复核决定',
   state_read: '恢复当前解题状态', observation_get: '查看历史观察与证据', summary_update: '更新公开解题进展',
   claim_record: '记录或修正假设', experiment_record: '记录实验结果及下一步', candidate_submit: '提交题目候选结果', candidate_check: '检查候选与本地数据的关系', run_complete: '保存解题报告并结束任务',
   image_view: '查看图像或指定区域', http_request: '向授权目标发送 HTTP 请求', remote_tcp_exchange: '与授权目标交换 TCP 数据', memory_search: '查找受审参考资料', memory_read: '阅读受审参考资料'

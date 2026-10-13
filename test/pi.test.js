@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { tools } from './helpers.js';
-import { preparePi } from '../src/pi/session.js';
+import { preparePi, loadSdk as loadRealSdk } from '../src/pi/session.js';
 test('Pi SDK adapter disables discovery, uses exact sandbox tool allowlist and persists sessions', async t => {
   const {
     registry,
@@ -12,7 +12,9 @@ test('Pi SDK adapter disables discovery, uses exact sandbox tool allowlist and p
     sessionOptions,
     handler,
     closed = false;
+  const nativeSkills = await loadRealSdk();
   const sdk = {
+    loadSkills: nativeSkills.loadSkills, formatSkillsForPrompt: nativeSkills.formatSkillsForPrompt,
     estimateTokens: message => Math.ceil(message.content.length / 4),
     ModelRuntime: {
       create: async () => ({

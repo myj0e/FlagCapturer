@@ -5,6 +5,19 @@ import vm from 'node:vm';
 import { createHash } from 'node:crypto';
 import { tools } from './helpers.js';
 
+test('image symptoms retrieve bounded interleaving and curve guidance', async t => {
+  const { call } = await tools(t);
+  for (const query of ['文字重叠 OCR 乱码', 'grating raster interleaving', '规则条纹']) {
+    const found = await call('workflow_search', { query });
+    assert.ok(found.matches.some(m => m.id === 'method/image-periodic-interleaving'), query);
+  }
+  const card = await call('workflow_read', { id: 'method/image-periodic-interleaving', detail: 'full' });
+  assert.deepEqual(card.method.capabilities.modules, ['PIL']);
+  assert.match(card.method.probe, /periodic_image.py/);
+  const curves = await call('workflow_search', { query: 'Peano Hilbert 空间填充曲线' });
+  assert.ok(curves.matches.some(m => m.id === 'method/image-space-filling'));
+});
+
 // Execute the same JS workflow program against authored synthetic bytes, with filesystem APIs
 // injected at the boundary. No real attachments are parsed on the test host.
 const program = (await readFile(new URL('../assets/workflow.mjs', import.meta.url), 'utf8')).replace(/^import .*;\n/gm, '');

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { authenticationErrorMessage } from '../src/pi/auth-errors.js';
+import { authenticationErrorMessage, safeModelError, modelRequestError } from '../src/pi/auth-errors.js';
 test('authentication diagnostics distinguish installation, callback, storage and network failures', () => {
   for (const [error, expected] of [[new Error('Sign in with ChatGPT requires a device ID (UUID) for this installation'), /设备 ID/], [new Error('Port 1455 is in use, probably by an unfinished login'), /1455/], [Object.assign(new Error('denied'), {
     code: 'EACCES'
@@ -11,6 +11,23 @@ test('authentication diagnostics distinguish installation, callback, storage and
   }), /网络连接失败/], [Object.assign(new Error('Cannot persist settings'), {
     code: 'CTFBOT_AUTH_SETTINGS'
   }), /安装设置/]]) assert.match(authenticationErrorMessage(error), expected);
+});
+
+test('model diagnostics preserve the OAuth failure and redact provider secrets', () => {
+  const error = modelRequestError('OAuth refresh failed for openai: fetch failed', 'openai');
+  assert.match(error.message, /OAuth refresh failed.*fetch failed/);
+  assert.match(error.message, /网络或代理/);
+  assert.doesNotMatch(error.message, /重新.*login/);
+  assert.equal(error.code, 'CTFBOT_MODEL_AUTH');
+  for (const value of [
+    'OAuth error https://localhost/callback?code=secret-value&state=secret-value',
+    'Request failed: {"access_token":"secret-value","message":"secret-value"}',
+    'Request failed Authorization: Bearer secret-value',
+    'Request failed api_key=secret-value',
+    'Request failed refresh_token="secret-value"',
+    'Request failed sk-secret-value'
+  ]) assert.doesNotMatch(safeModelError(value), /secret-value/);
+  assert.equal(modelRequestError('rate limited (429)', 'fixture').code, 'CTFBOT_MODEL_REQUEST');
 });
 test('diagnostics never disclose token responses, callback URLs or synchronization credentials', () => {
   for (const message of ['OpenAI OAuth token request failed (401): {"access_token":"secret-value"}', 'unknown provider error https://127.0.0.1:1455/auth/callback?code=secret-value', 'ChatGPT authorization failed: secret-value']) {

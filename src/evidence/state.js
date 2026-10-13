@@ -6,11 +6,32 @@ export class RunState {
     this.revision = 0;
     this.completion = null;
     this.recordQueue = Promise.resolve();
-    this.sections = Object.fromEntries(['observations', 'candidates', 'checks', 'claims', 'experiments', 'summaries', 'scripts', 'checkpoints', 'sources', 'assets', 'context_snapshots', 'tool_environments'].map(name => [name, new Map()]));
+    this.sections = Object.fromEntries(['observations', 'candidates', 'checks', 'claims', 'experiments', 'summaries', 'scripts', 'checkpoints', 'sources', 'assets', 'context_snapshots', 'tool_environments', 'executions', 'asset_locations', 'recovery_plans', 'skill_catalogs', 'skill_uses', 'route_reviews'].map(name => [name, new Map()]));
   }
-  add(section, value) {
+  async restore(events, source) {
+    invariant(this.revision === 0, 'State must be empty before restore');
+    for (const event of events) {
+      if (event.type !== 'state_record') continue;
+      const records = this.sections[event.section];
+      invariant(records && !records.has(event.id), 'Invalid or duplicate restored state record');
+      const bytes = await source.read(event.artifact.artifact);
+      invariant(!event.artifact.sha256 || sha256(bytes) === event.artifact.sha256, 'Restored state hash mismatch');
+      invariant(event.artifact.bytes === undefined || bytes.length === event.artifact.bytes, 'Restored state size mismatch');
+      const record = JSON.parse(bytes.toString());
+      invariant(record.id === event.id && event.id === `${event.section}-${records.size + 1}`, 'Invalid restored record order');
+      await this.evidence.artifact(bytes, 'application/json');
+      await this.evidence.append('state_record', { section: event.section, id: event.id, artifact: event.artifact, inherited: true });
+      records.set(event.id, record);
+      this.revision++;
+    }
+  }
+  snapshot() {
+    return { revision: this.revision, identity: structuredClone(this.identity),
+      sections: structuredClone(this.sections), select: RunState.prototype.select };
+  }
+  add(section, value, { guard = () => true } = {}) {
     // Background tool preparation and foreground tools can persist simultaneously.
-    const pending = this.recordQueue.then(() => this.appendRecord(section, value));
+    const pending = this.recordQueue.then(() => guard() ? this.appendRecord(section, typeof value === 'function' ? value() : value) : null);
     this.recordQueue = pending.catch(() => {});
     return pending;
   }
@@ -23,6 +44,7 @@ export class RunState {
       id,
       time: new Date().toISOString()
     };
+    if (Object.hasOwn(value, 'state_revision')) record.state_revision = this.revision + 1;
     const artifact = await this.evidence.artifact(record, 'application/json');
     await this.evidence.append('state_record', {
       section,

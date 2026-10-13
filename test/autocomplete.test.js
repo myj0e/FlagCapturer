@@ -90,7 +90,11 @@ test('Pi slash completion exposes only workbench commands and inserts through th
   assert.equal(result.items[0].value, 'thinking');
   assert.equal(app.autocomplete.applyCompletion(['/thi'], 0, 4, result.items[0], result.prefix).lines[0], '/thinking ');
   const all = await suggestions(app.autocomplete, '/');
-  assert.deepEqual(new Set(all.items.map(item => item.value)), new Set(COMMANDS.map(([name]) => name)));
+  const skills = (await app.availableSkills()).skills;
+  assert.deepEqual(new Set(all.items.map(item => item.value)), new Set([...COMMANDS.map(([name]) => name), ...skills.map(skill => 'skill:' + skill.name)]));
+  const selected = await suggestions(app.autocomplete, '/skill:ctf-for');
+  assert.equal(selected.items[0].value, 'skill:ctf-forensics');
+  assert.equal(app.autocomplete.applyCompletion(['/skill:ctf-for'], 0, 14, selected.items[0], selected.prefix).lines[0], '/skill:ctf-forensics ');
   assert.ok(!all.items.some(item => item.value === 'bash' || item.value === 'share'));
 });
 test('live provider, model and supported thinking arguments complete on forced Tab without falling back to files', async () => {

@@ -33,6 +33,8 @@ export class WorkbenchView {
       tools: 0
     };
     this.entries = [];
+    this.thinkingExpanded = false;
+    this.thinkingIndex = 0;
     this.scroll = 0;
     this.summaryScroll = 0;
     this.summaryFocused = false;
@@ -64,6 +66,10 @@ export class WorkbenchView {
     return entry;
   }
   renderEntry(entry, width) {
+    if (entry.kind === '思考') {
+      const title = `${this.thinkingExpanded ? '▾' : '▸'} ${entry.thinkingPending ? '模型正在思考' : '模型思考'} #${entry.thinkingIndex} · ${entry.thinkingCount ?? 0} 个片段${entry.thinkingInterrupted ? ' · 已中断' : ''} · F4 ${this.thinkingExpanded ? '折叠' : '展开'}`;
+      return [muted(fit(title, width)), ...(this.thinkingExpanded ? wrap(entry.text, Math.max(1, width - 2)).map(line => width > 2 ? '  ' + line : line) : []), ''];
+    }
     if (entry.presentation === 'tool') {
       return [...entry.text.split('\n').flatMap((line, index) => {
         if (line.startsWith('│ ')) {
@@ -74,7 +80,7 @@ export class WorkbenchView {
         return index === 0 ? wrapped.map(part => entry.kind === '工具失败' ? `\x1b[31m${part}\x1b[0m` : cyan(part)) : wrapped.map(muted);
       }), ''];
     }
-    if (['Agent', '思考'].includes(entry.kind)) return [(entry.kind === '思考' ? muted : cyan)(fit(entry.kind === '思考' ? '◌ 模型思考（服务返回）' : '◉ 模型说明（公开）', width)), ...wrap(entry.text, Math.max(1, width - 2)).map(line => width > 2 ? '  ' + line : line), ''];
+    if (entry.kind === 'Agent') return [cyan(fit('◉ 模型说明（公开）', width)), ...wrap(entry.text, Math.max(1, width - 2)).map(line => width > 2 ? '  ' + line : line), ''];
     return [...wrap(`[${entry.kind}] ${entry.text}`, width), ''];
   }
   trim() {
@@ -83,6 +89,10 @@ export class WorkbenchView {
   scrollBy(delta) {
     if (this.summaryFocused && this.terminal.columns >= 110) this.summaryScroll = Math.max(0, this.summaryScroll - delta);
     else this.scroll = Math.max(0, this.scroll + delta);
+    this.changed();
+  }
+  toggleThinking() {
+    this.thinkingExpanded = !this.thinkingExpanded;
     this.changed();
   }
   renderSummary(width, height) {
@@ -131,9 +141,10 @@ export class WorkbenchView {
   choose(title, choices, {
     signal,
     detail = '',
-    selected
+    selected,
+    confirmation = false
   } = {}) {
-    const input = new Input({
+    const input = confirmation ? undefined : new Input({
       prompt: '搜索 > '
     });
     const list = new SelectList(choices.map(item => ({
@@ -148,15 +159,16 @@ export class WorkbenchView {
       detail,
       input,
       list,
+      confirmation,
       focused: false,
-      render: width => input.render(width),
+      render: width => confirmation ? list.render(width) : input.render(width),
       invalidate: () => {}
     };
     list.onSelect = item => modal.finish(item.value);
     list.onCancel = () => modal.finish(undefined, new Error('已取消'));
     modal.handleInput = data => {
       if (this.scrollAuth(modal, data)) return;
-      if (['up', 'down', 'enter', 'escape'].some(key => matchesKey(data, key))) list.handleInput(data);else {
+      if (['up', 'down', 'enter', 'escape'].some(key => matchesKey(data, key))) list.handleInput(data);else if (input) {
         input.handleInput(data);
         list.setFilter(input.getValue());
       }
@@ -231,13 +243,14 @@ export class WorkbenchView {
     const s = this.state;
     const header = [cyan(fit(clean(` FlagCapturer  ·  ${s.status}  ·  ${s.challenge || '尚未导入题目'}`).replaceAll('\n', ' '), width)), fit(clean(` ${s.provider || '选择服务 /login'}  /  ${s.model || '选择模型 /model'}  ·  思考 ${s.thinking}`).replaceAll('\n', ' '), width)];
     const status = statusline(s);
-    const footer = [muted(fit(status, width)), muted(fit(' /help 命令  Ctrl+P 菜单  Ctrl+C 停止/退出  F3 摘要/日志  PgUp/PgDn 翻页  Shift+Enter 换行', width))];
+    const footer = [muted(fit(status, width)), muted(fit(' /help 命令  Ctrl+P 菜单  Ctrl+C 停止/退出  F3 摘要/日志  F4 思考  PgUp/PgDn 翻页  Shift+Enter 换行', width))];
     let editorLines;
     if (this.modal) {
       const m = this.modal;
       if (m.input) m.input.focused = m.focused;
-      editorLines = m.input ? m.secret ? [fit('密钥 > ' + '*'.repeat(Math.min([...m.input.getValue()].length, Math.max(0, width - 9))), width) + CURSOR_MARKER] : m.input.render(width) : [];
+      editorLines = m.confirmation ? m.list.render(width) : m.input ? m.secret ? [fit('密钥 > ' + '*'.repeat(Math.min([...m.input.getValue()].length, Math.max(0, width - 9))), width) + CURSOR_MARKER] : m.input.render(width) : [];
       footer[1] = muted(fit(m.authWait ? ' ↑↓ / PgUp/PgDn 浏览完整链接 · Enter 打开浏览器 · Esc 取消' : m.document ? ' ↑↓ / PgUp/PgDn 浏览 · Enter / Esc 返回' : this.authNotes.length ? ' PgUp/PgDn 浏览完整链接 · Enter 提交输入 · Esc 取消' : ' 输入过滤或填写 · Enter 确认 · Esc 取消', width));
+      if (m.confirmation) footer[1] = muted(fit(' ↑↓ 选择 · Enter 确认 · Esc 取消', width));
     } else {
       this.editor.setAutocompleteMaxVisible(Math.max(3, Math.min(5, rows - 8)));
       editorLines = this.editor.render(width);
@@ -246,6 +259,14 @@ export class WorkbenchView {
     if (rows < 8 || width < 20) {
       const m = this.modal;
       const label = m?.title ?? `FlagCapturer · ${s.status}`;
+      if (m?.confirmation) {
+        const count = Math.min(rows, Math.max(1, rows - 1), editorLines.length);
+        const selected = Math.max(0, editorLines.findIndex(line => clean(line).trimStart().startsWith('→ ')));
+        const offset = Math.max(0, selected - count + 1);
+        const options = editorLines.slice(offset, offset + count);
+        const top = Array.from({ length: rows - options.length }, (_, i) => i === 0 ? fit(clean(label), width) : '');
+        return [...top, ...options];
+      }
       const input = m?.input ? m.secret ? '*'.repeat(Math.min(m.input.getValue().length, width - 1)) + CURSOR_MARKER : m.input.render(width).at(-1) : m?.document ? 'Enter / Esc 返回' : fit(this.editor.getText(), width - 1) + CURSOR_MARKER;
       return [...Array.from({
         length: rows - 1
@@ -281,7 +302,7 @@ export class WorkbenchView {
         const lines = wrap(m.document, width);
         m.offset = Math.min(m.offset, Math.max(0, lines.length - height + 2));
         body.push(...lines.slice(m.offset, m.offset + Math.max(0, height - body.length)));
-      } else if (m.list) body.push(...m.list.render(width));
+      } else if (m.list && !m.confirmation) body.push(...m.list.render(width));
       body = body.slice(0, height);
     } else {
       const sidebar = width >= 110;

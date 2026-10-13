@@ -112,6 +112,41 @@ test('Stop aborts a real Pi tool operation and cleans up its actual Docker conta
   assert.equal(JSON.parse(await readFile(join(result.run_dir, 'recovery.json'), 'utf8')).pending, false);
   assert.equal((await audit(result.run_dir)).ok, true);
 });
+test('real Pi resume forks history and restores generated files in the original Docker image without replay', async t => {
+  const { root, workspace } = await fixture(t);
+  const firstPi = await scriptedPi(t, root, [
+    { name: 'script_save', arguments: { language: 'python', source: "from pathlib import Path\nPath('/work/resume-output.txt').write_text('flag{resumed_fixture}')" } },
+    { name: 'script_run', arguments: { script_id: 'scripts-1', input_asset_ids: ['assets-1'], outputs: [{ path: '/work/resume-output.txt', display_name: '续接测试结果' }] } }
+  ]);
+  const controller = cancellation(t);
+  const first = await solve({ workspace: workspace.root, provider: firstPi.provider, model: 'fixture', thinkingLevel: 'off',
+    confirmModelUsage: true, image, runsRoot: join(root, 'runs'), signal: controller.signal,
+    onEvent: event => { if (event.type === 'tool_execution_end' && event.toolName === 'script_run') controller.abort(); }
+  }, { preparePi: firstPi.prepare });
+  assert.equal(first.status, 'cancelled', JSON.stringify(first));
+  assert.equal(firstPi.requests(), 2);
+  const originalLog = await readFile(join(first.run_dir, 'events.jsonl'));
+  const secondPi = await scriptedPi(t, root, [
+    { name: 'command_run', arguments: { argv: ['python3', '-c', "from pathlib import Path; print(Path('/work/resume-output.txt').read_text())"] } },
+    { name: 'candidate_submit', arguments: { candidate: 'flag{resumed_fixture}' } },
+    { name: 'run_complete', arguments: { outcome: 'completed', candidate_ids: ['candidates-1'], unresolved: [], summary: '续接完成', writeup: '# 续接\n直接恢复已保存文件，没有重跑生成脚本。' } }
+  ], (context, index) => {
+    if (index === 0) {
+      assert.match(JSON.stringify(context.messages), /Fresh sandbox/);
+      assert.ok(context.messages.some(message => message.role === 'assistant' && message.content.some(block => block.type === 'toolCall' && block.name === 'script_save')));
+    }
+    if (index === 1) assert.match(JSON.stringify(context.messages.findLast(message => message.role === 'toolResult')), /flag\{resumed_fixture\}/);
+  });
+  const second = await solve({ resumeFrom: first.run_dir, provider: secondPi.provider, model: 'fixture', thinkingLevel: 'off',
+    confirmModelUsage: true, runsRoot: join(root, 'runs'), signal: cancellation(t).signal
+  }, { preparePi: secondPi.prepare });
+  assert.equal(second.status, 'completed', JSON.stringify(second));
+  assert.equal(secondPi.requests(), 3);
+  assert.notEqual(first.run_dir, second.run_dir);
+  assert.deepEqual(await readFile(join(first.run_dir, 'events.jsonl')), originalLog);
+  assert.equal((await audit(first.run_dir)).ok, true);
+  assert.equal((await audit(second.run_dir)).ok, true);
+});
 test('real Pi forwards rendered sandbox image blocks to a multimodal provider boundary', async t => {
   const {
     root,

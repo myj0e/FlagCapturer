@@ -1,6 +1,7 @@
 import { s } from './schema.js';
 import { invariant, sha256, readRegular, confined } from '../util.js';
 import { confinedWorkPath, MAX_ASSET_BYTES } from './assets.js';
+import { generation, recordExecution } from '../evidence/provenance.js';
 
 export function installProvisioning(registry, { provisioner, workspace }) {
   const { state, evidence } = registry;
@@ -31,6 +32,8 @@ export function installProvisioning(registry, { provisioner, workspace }) {
       }
       const result = await runtime.execute(argv, { signal });
       const stdoutArtifact = await evidence.artifact(result.stdout), stderrArtifact = await evidence.artifact(result.stderr);
+      const execution = await recordExecution(registry, argv, { exit_code: result.code, timed_out: result.timedOut, cancelled: result.cancelled,
+        stdout_artifact: stdoutArtifact, stderr_artifact: stderrArtifact }, { input_asset_ids: parents, environment_id, isolated, inputs });
       await evidence.append('tool_environment_execution', { environment_id, base_image: provisioner.image, argv,
         inputs: inputs.map(input => ({ ...input, sha256: records.find(x => x.id === input.asset_id).sha256 })), script_id,
         exit_code: result.code, timed_out: result.timedOut, cancelled: result.cancelled, truncated: result.truncated,
@@ -39,9 +42,10 @@ export function installProvisioning(registry, { provisioner, workspace }) {
       if (!result.cancelled && result.code === 0) for (const output of outputs) {
         const bytes = await runtime.export(output.path, signal, { maxBytes: MAX_ASSET_BYTES });
         outputAssets.push(await state.add('assets', { origin: 'derived', captured_path: output.path, bytes: bytes.length, sha256: sha256(bytes),
-          parents, artifact: await evidence.artifact(bytes), transformation: { operation: 'tool_exec', display_name: output.display_name, environment_id, controller_proven: false }, completeness: 'exact captured bytes; semantic completeness is not established' }));
+          parents, artifact: await evidence.artifact(bytes), generation: generation(registry, parents, execution.id, 'controller_observed'), sandbox_scope: 'isolated_tool',
+          transformation: { operation: 'tool_exec', display_name: output.display_name, environment_id, controller_proven: false }, completeness: 'exact captured bytes; semantic completeness is not established' }));
       }
-      return { environment_id, base_image: provisioner.image, isolated, script_path: scriptPath, exit_code: result.code, timed_out: result.timedOut, truncated: result.truncated, cancelled: result.cancelled,
+      return { environment_id, execution_id: execution.id, base_image: provisioner.image, isolated, script_path: scriptPath, exit_code: result.code, timed_out: result.timedOut, truncated: result.truncated, cancelled: result.cancelled,
         stdout: result.stdout.subarray(0, 4096).toString('utf8'), stderr: result.stderr.subarray(0, 4096).toString('utf8'),
         stdout_artifact: stdoutArtifact, stderr_artifact: stderrArtifact, output_assets: outputAssets,
         ...(result.stdout.length > 4096 ? { stdout_tail: { text: result.stdout.subarray(-1024).toString('utf8'), offset: result.stdout.length - 1024, source_bytes: result.stdout.length } } : {}),

@@ -828,5 +828,128 @@
     ],
     "validation": "source-derived",
     "license": "Repository-authored method description; linked source retains its own license."
+  },
+  {
+    "version": "1.0.0",
+    "operations": [],
+    "sources": [
+      "https://goodlunatic.github.io/posts/d0736a7/"
+    ],
+    "validation": "source-derived",
+    "license": "Repository-authored method description; linked source retains its own license.",
+    "id": "method/image-periodic-interleaving",
+    "title": "光栅与周期交织图像分离",
+    "summary": "文字重叠、规则条纹或 OCR 持续乱码时，有限检查行列周期和相位分离；结果需要目视与结构验证。",
+    "tags": [
+      "光栅",
+      "周期交织",
+      "文字重叠",
+      "条纹",
+      "乱码",
+      "OCR",
+      "grating",
+      "raster",
+      "interleaving",
+      "overlapping",
+      "stripes",
+      "stego",
+      "image"
+    ],
+    "triggers": [
+      "黑白图中文字重叠，缩放或滤镜后仍不可读",
+      "规则空列、条纹或周期结构",
+      "overlapping text or persistent OCR garbage"
+    ],
+    "prerequisites": [
+      "可读取原始分辨率图像",
+      "先查看实际图像，不以工具魔数标签确认编码"
+    ],
+    "exclusions": [
+      "规则纹理也可能是半色调、缩放或扫描伪影",
+      "未命中有限周期范围不能排除全部交织方式"
+    ],
+    "probe": "用 skill_read 读取 builtin/ctf-forensics/image-interleaving.md。通过 skill_materialize 准备 builtin/ctf-forensics/scripts/periodic_image.py，在沙箱中有限扫描行/列、周期和全部相位，查看带参数拼图；有希望时导出原分辨率候选。可比较 compact 与 mask，不自动排名。 历史 resume 的冻结 Skill 快照若没有新资源，不重复读取缺失路径：可在沙箱自行按列 x=phase,phase+period,... 抽取像素（按行同理），保存标注参数的候选图；新任务才会捕获更新后的辅助脚本。",
+    "interpretation": {
+      "supports": [
+        "分离相位后出现连贯文字或图形，参数和源文件可追溯"
+      ],
+      "contradicts": [
+        "仅对已测试参数未产生假设预期结构"
+      ],
+      "inconclusive": [
+        "候选预览太小、范围未覆盖、只有 OCR 猜测或魔数标签"
+      ]
+    },
+    "branches": [
+      "记录源图、方向、周期、相位与观察；按实际提示检索后续方法",
+      "没有改善时保留测试范围，检查其他解释"
+    ],
+    "capabilities": {
+      "binaries": [
+        "python3"
+      ],
+      "modules": [
+        "PIL"
+      ]
+    }
+  },
+  {
+    "version": "1.0.0",
+    "operations": [],
+    "sources": [
+      "https://goodlunatic.github.io/posts/d0736a7/"
+    ],
+    "validation": "source-derived",
+    "license": "Repository-authored method description; linked source retains its own license.",
+    "id": "method/image-space-filling",
+    "title": "空间填充曲线与像素重排",
+    "summary": "方向序列、递归提示或遍历结构支持时，检查 Hilbert/Peano 等像素排列；尺寸吻合仅是线索。",
+    "tags": [
+      "空间填充曲线",
+      "像素重排",
+      "方向序列",
+      "Hilbert",
+      "Peano",
+      "curve",
+      "permutation",
+      "image",
+      "fractal"
+    ],
+    "triggers": [
+      "提取出方向序列或递归几何提示",
+      "怀疑二维图像由一维遍历顺序重排"
+    ],
+    "prerequisites": [
+      "有指向遍历结构的观察",
+      "明确源图尺寸、遍历方向以及 gather/scatter 映射"
+    ],
+    "exclusions": [
+      "尺寸为二或三的幂不证明曲线家族",
+      "双射、连续性和可逆性不证明对应题目编码"
+    ],
+    "probe": "用 skill_read 读取 builtin/ctf-forensics/space-filling-curves.md。根据实际提示选择曲线族和阶数，先检查坐标范围/唯一性，再有限验证有依据的方向和 gather/scatter 映射，保存源资产和结果参数。 历史 resume 快照若没有该参考，使用本卡中的适用边界并按需获取可用资料，不重复读取缺失路径。",
+    "interpretation": {
+      "supports": [
+        "重排后得到有一致结构且可独立解码的内容"
+      ],
+      "contradicts": [
+        "已测试映射未产生预期内容，只否定这些变体"
+      ],
+      "inconclusive": [
+        "只证明算法可逆、曲线连续或结果看起来像二维码"
+      ]
+    },
+    "branches": [
+      "由结构决定独立解码方式；取得答案后及时记录",
+      "若方向或曲线变体不明，先找缺失依据"
+    ],
+    "capabilities": {
+      "binaries": [
+        "python3"
+      ],
+      "modules": [
+        "PIL"
+      ]
+    }
   }
 ]

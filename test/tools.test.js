@@ -10,6 +10,20 @@ const completion = {
   unresolved: [],
   writeup: '# Synthetic solution\nActual fixture evidence.'
 };
+test('identical command requests include one history notice without blocking execution', async t => {
+  const { call, state } = await tools(t);
+  const args = { argv: ['python3', '-c', 'print(1)'] };
+  const first = await call('command_run', args);
+  assert.equal(first.request_history, undefined);
+  const second = await call('command_run', args);
+  assert.equal(second.request_history.previous_observation_id, first.observation_id);
+  assert.match(second.request_history.notice, /environment and randomness may differ/);
+  const third = await call('command_run', args);
+  assert.equal(third.request_history, undefined);
+  const changed = await call('command_run', { argv: ['python3', '-c', 'print(2)'] });
+  assert.equal(changed.request_history, undefined);
+  assert.equal([...state.sections.observations.values()].filter(o => o.tool === 'command_run').length, 4);
+});
 test('candidate submission preserves exact text and does not end the run', async t => {
   const {
     call,

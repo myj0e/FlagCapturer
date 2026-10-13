@@ -32,9 +32,12 @@ export function solvingSummary(state) {
   else if (state.latestActivity) add('最近操作', `${state.latestActivity.purpose} · ${state.latestActivity.status}`);
   else if (p.workflow) add('最近操作', `${p.workflow.method_title ?? '工作流实验'} · ${statuses[p.workflow.status] ?? p.workflow.status}`);
   add('当前方案', summary?.approach, summary ? '尚未说明当前方案' : '等待 Agent 发布公开摘要');
+  if (p.skills?.length) add('使用的指南', [...new Set(p.skills.map(s => s.resource.replace(/^(builtin|vendor|user|custom-\d+)\//, '').replace(/\/SKILL\.md$/, '')))]);
+  if (p.route_review) add('历史路线复核', [p.route_review.reason ?? p.route_review.rationale, '记录仅供参考，当前进展以最新摘要为准']);
   const claims = p.claims ?? [];
   add('关键线索', summary?.facts ?? claims.filter(c => c.state === 'supported').map(c => c.statement), '暂无已整理线索');
   add('待验证假设', summary?.hypotheses ?? claims.filter(c => c.state === 'hypothesis').map(c => c.statement), '暂无待验证假设');
+  add('失败尝试（未排除）', summary?.unverified_attempts?.map(item => `${item.attempt}：${item.result}\n范围：${item.scope}；依据不足，不能据此排除该方向`));
   add('下一步', summary?.next_steps, completion ? '本次运行已结束，可阅读解题报告' : '等待下一次实验安排');
   add('阻塞与缺口', [...values(summary?.blockers), ...values(summary?.remaining_gap), ...(summary?.blocker_kind ? [blockers[summary.blocker_kind] ?? summary.blocker_kind] : [])], '暂无已报告阻塞');
   add('已有能力', summary?.achieved_capabilities);
@@ -47,11 +50,23 @@ export function solvingSummary(state) {
   if (completion) add('运行结果', [statuses[completion.outcome] ?? completion.outcome, completion.summary, ...values(completion.unresolved), '/writeup 阅读解题报告']);
   add('运行信息', [`附件授权：${state.consent ? '已授权' : '未授权'}`, `思考强度：${state.thinking ?? 'off'}`, state.busy ? '/stop 停止本次运行' : '/run 开始解题']);
   let updated = '';
-  if (summary?.time && Number.isFinite(Date.parse(summary.time))) updated = new Date(summary.time).toLocaleTimeString('zh-CN', { hour12: false });
+  const displayTime = summary?.generated_time ?? summary?.time;
+  if (displayTime && Number.isFinite(Date.parse(displayTime))) updated = new Date(displayTime).toLocaleTimeString('zh-CN', { hour12: false });
+  const maintenance = state.contextMaintenance;
+  const notices = [];
+  if (maintenance?.lastSuccessAt && Number.isFinite(Date.parse(maintenance.lastSuccessAt))) notices.push('最近自动整理成功：' + new Date(maintenance.lastSuccessAt).toLocaleTimeString('zh-CN', { hour12: false }));
+  if (maintenance?.state === 'failed') notices.push(`${maintenance.reason} · ${summary ? '当前展示上次摘要' : '尚无有效自动摘要'}${maintenance.retryInTurns !== null && maintenance.retryInTurns !== undefined ? ` · ${maintenance.retryInTurns} 个模型轮次后重试` : ''}`);
+  else if (maintenance?.state === 'running') notices.push(maintenance.operation === 'refresh' ? '后台整理中，解题继续' : '正在压缩上下文');
+  else if (maintenance?.state === 'ready') notices.push('后台摘要已生成，等待下次请求采用');
+  else if (maintenance?.state === 'repairing') notices.push(`${maintenance.operation === 'refresh' ? '后台' : ''}正在修复总结回复：` + maintenance.reason);
+  else if (maintenance?.state === 'cancelled') notices.push('状态整理已取消，保留已有摘要');
+  if (p.summary_pending) notices.push('有新观察，以下为上次摘要');
+  if (Number.isInteger(summary?.source_turn)) notices.push(`摘要覆盖至第 ${summary.source_turn} 轮${p.summary_pending ? '，之后有新进展' : ''}`);
+  if (summary?.source_time && Number.isFinite(Date.parse(summary.source_time))) notices.push('取材截至：' + new Date(summary.source_time).toLocaleTimeString('zh-CN', { hour12: false }));
   return {
     title: '解题进展',
-    subtitle: summary ? `模型整理${updated ? ' · 更新于 ' + updated : ''}` : '摘要待发布 · 操作状态实时更新',
-    notice: p.summary_pending ? '有新观察，以下为上次摘要' : '', sections
+    subtitle: summary ? `模型整理${updated ? (summary.source_time ? ' · 生成于 ' : ' · 更新于 ') + updated : ''}` : '摘要待发布 · 操作状态实时更新',
+    notice: notices.join('\n'), sections
   };
 }
 export function summaryDocument(state) {

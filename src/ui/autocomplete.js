@@ -35,6 +35,7 @@ const hints = {
   model: '[provider/model]',
   thinking: '[level]',
   import: '<file|workspace>',
+  resume: '<run-directory>',
   network: '<grant.json|off>',
   memory: '<snapshot.json|off>'
 };
@@ -82,7 +83,7 @@ export function createWorkbenchAutocomplete(app, commands, {
       label: level,
       description: level === app.options.thinkingLevel ? '当前选择' : ''
     })), prefix);
-    if (['import', 'network', 'memory'].includes(name)) {
+    if (['import', 'resume', 'network', 'memory'].includes(name)) {
       const result = await files.getSuggestions([prefix], 0, prefix.length, {
         signal: signal ?? new AbortController().signal,
         force: true
@@ -90,7 +91,7 @@ export function createWorkbenchAutocomplete(app, commands, {
       const items = result?.items ?? [];
       // Pi replaces the entire argument; retain any portion before its path prefix.
       const leading = result ? prefix.slice(0, prefix.length - result.prefix.length) : '';
-      return [...(name !== 'import' && 'off'.startsWith(prefix) ? [{
+      return [...(['network', 'memory'].includes(name) && 'off'.startsWith(prefix) ? [{
         value: 'off',
         label: 'off',
         description: '关闭'
@@ -102,7 +103,8 @@ export function createWorkbenchAutocomplete(app, commands, {
     return null;
   };
   const semantic = new Set(Object.keys(hints));
-  const makeCombined = signal => new CombinedAutocompleteProvider(commands.map(([name, description]) => ({
+  let skillCommands = [];
+  const makeCombined = signal => new CombinedAutocompleteProvider([...commands, ...skillCommands].map(([name, description]) => ({
     name,
     description,
     argumentHint: hints[name],
@@ -114,10 +116,14 @@ export function createWorkbenchAutocomplete(app, commands, {
   return {
     async getSuggestions(lines, line, col, options) {
       if (options.signal.aborted) return null;
+      if ((lines[line] ?? '').trimStart().startsWith('/') && app.availableSkills) {
+        const result = await app.availableSkills();
+        skillCommands = result.skills.map(skill => [`skill:${skill.name}`, skill.description]);
+      }
       const before = (lines[line] ?? '').slice(0, col);
       const command = /^\s*\/(\S+)\s/.exec(before);
       // Tab must use semantic parameter completion instead of Pi's forced file mode.
-      const requestProvider = command && semantic.has(command[1]) ? makeCombined(options.signal) : combined;
+      const requestProvider = makeCombined(options.signal);
       let result = await requestProvider.getSuggestions(lines, line, col, {
         ...options,
         force: command && semantic.has(command[1]) ? false : options.force

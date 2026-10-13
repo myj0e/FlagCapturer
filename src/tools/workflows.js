@@ -33,6 +33,8 @@ export async function installWorkflows(registry, { command, workspace, runtime, 
     if (!installed.has(name)) {
       const path = `/work/.workflow-programs/${randomUUID()}.mjs`;
       await runtime.write(path, programs.get(name), signal);
+      await registry.state.add('scripts', { path, language: 'javascript', origin: 'builtin-workflow',
+        source_artifact: await registry.evidence.artifact(programs.get(name), 'text/javascript') });
       installed.set(name, path);
     }
     return installed.get(name);
@@ -157,12 +159,14 @@ print(json.dumps(result))`;
     if (['observed', 'partial'].includes(result.status)) for (const output of result.outputs) {
       invariant(typeof output.path === 'string' && output.path.startsWith(output_dir + '/') && /^\d+$/.test(output.path.slice(output_dir.length + 1)), 'Invalid operation output path');
       outputAssets.push(await assets.capture(output.path, ids, { operation: key, version: contract.version, parameters,
+        execution_id: execution.execution_id, producer_binding: 'controller_observed',
         method_id, label: output.label, source_name: result.entry?.name, execution: { stdout: execution.stdout_artifact, stderr: execution.stderr_artifact }, controller_proven: false }, signal, output));
     }
     return { ...execution, ...resultPreview(result), status: result.status, asset_ids: ids, output_assets: outputAssets,
       method_id, operation_version: contract.version, fingerprint, retry_reason,
       repeated_observation_ids: previous.slice(-5).map(o => o.id),
-      ...(previous.length && !retry_reason ? { repeat_notice: 'Same input bytes and parameters were tried. Check previous results or provide retry_reason when environment/timing changed.' } : {}),
+      ...(previous.length && !retry_reason && !previous.some(o => o.result.repeat_notice) ? {
+        repeat_notice: 'Same input bytes and parameters were tried; previous results are linked. Environment, timing and randomness may differ; repeating is allowed.' } : {}),
       interpretation: 'Execution and structural checks do not establish semantic correctness; inspect coverage and method prerequisites.' };
   }, { observe: true });
 }

@@ -39,56 +39,64 @@ export async function scriptedPi(t, root, calls, onRequest = () => {}, {
       }
     }],
     streamSimple: (_model, context) => {
-      let call;
-      const isSummary = context.messages.some(message => message.role === 'system' && typeof message.content === 'string' && message.content.includes('context summarization assistant'));
-      if (summarize && isSummary) {
-        summaries++;
-        assert.ok(summaries <= 4, 'Unexpected repeated summarization');
-        call = {
-          content: [{
-            type: 'text',
-            text: summarize(context)
-          }]
-        };
-      } else {
-        assert.ok(requests < calls.length, 'No unexpected model continuation');
-        onRequest(context, requests);
-        call = calls[requests++];
-      }
-      const message = {
-        role: 'assistant',
-        content: call.content ?? [{
-          type: 'toolCall',
-          id: `integration-${requests}`,
-          ...call
-        }],
-        api: 'openai-completions',
-        provider,
-        model: 'fixture',
-        usage: isSummary && summaryUsage ? summaryUsage : {
-          input: 0,
-          output: 0,
-          cacheRead: 0,
-          cacheWrite: 0,
-          totalTokens: 0,
-          cost: {
+      const stream = createAssistantMessageEventStream();
+      void (async () => {
+        let call;
+        const isSummary = context.messages.some(message => message.role === 'system' && typeof message.content === 'string' && message.content.includes('context summarization assistant'));
+        if (summarize && isSummary) {
+          summaries++;
+          assert.ok(summaries <= 4, 'Unexpected repeated summarization');
+          call = {
+            content: [{
+              type: 'text',
+              text: await summarize(context)
+            }]
+          };
+        } else {
+          assert.ok(requests < calls.length, 'No unexpected model continuation');
+          const index = requests++;
+          await onRequest(context, index);
+          call = calls[index];
+        }
+        const message = {
+          role: 'assistant',
+          content: call.content ?? [{
+            type: 'toolCall',
+            id: `integration-${requests}`,
+            ...call
+          }],
+          api: 'openai-completions',
+          provider,
+          model: 'fixture',
+          usage: isSummary && summaryUsage ? summaryUsage : {
             input: 0,
             output: 0,
             cacheRead: 0,
             cacheWrite: 0,
-            total: 0
-          }
-        },
-        stopReason: call.content ? 'stop' : 'toolUse',
-        timestamp: Date.now()
-      };
-      const stream = createAssistantMessageEventStream();
-      stream.push({
-        type: 'done',
-        reason: message.stopReason,
-        message
+            totalTokens: 0,
+            cost: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              total: 0
+            }
+          },
+          stopReason: call.stopReason ?? (call.content ? 'stop' : 'toolUse'),
+          ...(call.errorMessage ? { errorMessage: call.errorMessage } : {}),
+          timestamp: Date.now()
+        };
+        stream.push(message.stopReason === 'error' ? { type: 'error', reason: 'error', error: message } : {
+          type: 'done', reason: message.stopReason, message
+        });
+        stream.end(message);
+      })().catch(error => {
+        const message = { role: 'assistant', content: [], api: 'openai-completions', provider, model: 'fixture',
+          usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { total: 0 } },
+          stopReason: 'error', errorMessage: error.message, timestamp: Date.now() };
+        stream.push({ type: 'error', reason: 'error', error: message });
+        stream.end(message);
       });
-      stream.end(message);
       return stream;
     }
   });
@@ -107,6 +115,7 @@ export async function scriptedPi(t, root, calls, onRequest = () => {}, {
           create: async () => modelRuntime
         },
         SessionManager: {
+          forkFrom: (...args) => sdk.SessionManager.forkFrom(...args),
           create: (cwd, directory) => {
             const manager = sdk.SessionManager.create(cwd, directory);
             seedHistory(manager, provider);

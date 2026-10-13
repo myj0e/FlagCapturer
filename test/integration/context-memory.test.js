@@ -3,13 +3,30 @@ import assert from 'node:assert/strict';
 import { tools } from '../helpers.js';
 import { scriptedPi } from './provider.js';
 import { memoryFixture } from '../context-fixture.js';
-import { audit } from '../../src/evidence/store.js';
+import { setTimeout as delay } from 'node:timers/promises';
+import { audit, readEvents } from '../../src/evidence/store.js';
+
+async function waitReady(agent) {
+  for (let i = 0; i < 1000; i++) {
+    if (agent.stats().maintenance.state === 'ready') return;
+    await delay(5);
+  }
+  assert.fail('Background summary did not become ready');
+}
 
 test('real Pi refreshes at ten completed turns without compacting history or changing system/tools', async t => {
   const { root, registry, state, evidence } = await tools(t);
-  let firstSystem;
+  let firstSystem, agent, releaseSummary;
+  const mainStarted = new Promise(resolve => { releaseSummary = resolve; });
+  registry.define('fixture_wait', 'Wait for the controlled background fixture', { type: 'object', properties: {} }, async () => {
+    await waitReady(agent);
+    assert.equal(pi.session().sessionManager.getEntries().filter(e => e.type === 'usage').length, 0, 'background must not advance the live Pi leaf');
+    assert.equal(agent.stats().usage.tokens.total, 30, 'pending receipts are visible before safe-boundary flush');
+    return { ready: true };
+  });
   const calls = [
     ...Array.from({ length: 10 }, () => ({ name: 'state_read', arguments: { section: 'overview' } })),
+    { name: 'fixture_wait', arguments: {} },
     { name: 'candidate_submit', arguments: { candidate: 'flag{synthetic_fixture}' } },
     { name: 'run_complete', arguments: { outcome: 'completed', candidate_ids: ['candidates-1'], unresolved: [], summary: '完成', writeup: '# 完成\nflag{synthetic_fixture}' } }
   ];
@@ -19,9 +36,14 @@ test('real Pi refreshes at ten completed turns without compacting history or cha
     assert.deepEqual(systems, firstSystem, 'maintenance cannot modify system prompt/tool declarations');
     const live = context.messages.filter(m => m.role === 'user' && JSON.stringify(m.content).includes('ctf-current-context'));
     assert.equal(live.length, 1);
-    if (index >= 10) assert.match(JSON.stringify(live), /编码输入，保留原始字节/);
+    if (index === 10) {
+      assert.doesNotMatch(JSON.stringify(live), /编码输入，保留原始字节/);
+      releaseSummary();
+    }
+    if (index >= 11) assert.match(JSON.stringify(live), /编码输入，保留原始字节/);
   }, {
-    summarize: context => {
+    summarize: async context => {
+      await mainStarted;
       const input = JSON.parse(context.messages.findLast(m => m.role === 'user').content);
       assert.equal(input.kind, 'refresh');
       assert.ok(context.messages.every(m => m.role !== 'system' || !m.toolsAdded?.length));
@@ -35,10 +57,10 @@ test('real Pi refreshes at ten completed turns without compacting history or cha
     }
   });
   const prepared = await pi.prepare({ provider: pi.provider, model: 'fixture', thinkingLevel: 'off' });
-  const agent = await prepared.create({ registry, state, evidence, task: '提取 Flag', guidance: '中文报告' });
+  agent = await prepared.create({ registry, state, evidence, task: '提取 Flag', guidance: '中文报告' });
   t.after(() => agent.close());
   await agent.prompt('开始解题');
-  assert.equal(pi.requests(), 12);
+  assert.equal(pi.requests(), 13);
   assert.equal(pi.summaries(), 1);
   assert.equal(state.sections.context_snapshots.size, 1);
   const snapshot = [...state.sections.context_snapshots.values()][0];
@@ -52,6 +74,42 @@ test('real Pi refreshes at ten completed turns without compacting history or cha
 });
 
 const seedUsage = { input: 0, output: 0, totalTokens: 0, cacheRead: 0, cacheWrite: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
+test('real Pi repairs a periodic summary once, counts both requests and commits a verified recovery target', async t => {
+  const { root, registry, state, evidence } = await tools(t);
+  let summaries = 0, agent;
+  registry.define('fixture_wait', 'Wait for the controlled background fixture', { type: 'object', properties: {} }, async () => { await waitReady(agent); return { ready: true }; });
+  const pi = await scriptedPi(t, root, [
+    ...Array.from({ length: 10 }, () => ({ name: 'state_read', arguments: { section: 'overview' } })),
+    { name: 'fixture_wait', arguments: {} },
+    { name: 'run_complete', arguments: { outcome: 'unsolved', candidate_ids: [], unresolved: [], summary: '合成验收', writeup: '# 合成验收\n总结修复完成。' } }
+  ], (context, index) => {
+    if (index === 11) assert.match(JSON.stringify(context.messages), /已修复的有效参考/);
+  }, {
+    summarize: context => {
+      summaries++;
+      const input = JSON.parse(context.messages.findLast(message => message.role === 'user').content);
+      if (summaries === 1) return '0\n{"broken":true}';
+      assert.ok(input.repair);
+      return JSON.stringify(memoryFixture({ references: [{ asset_id: 'assets-1', description: '已修复的有效参考', evidence_ids: [] }] }));
+    },
+    summaryUsage: { input: 20, output: 10, totalTokens: 30, cacheRead: 0, cacheWrite: 0, cost: { total: 0 } }
+  });
+  const events = [];
+  const prepared = await pi.prepare({ provider: pi.provider, model: 'fixture', thinkingLevel: 'off' });
+  agent = await prepared.create({ registry, state, evidence, task: '合成总结修复验收', onEvent: event => events.push(event) });
+  t.after(() => agent.close());
+  await agent.prompt('开始');
+  assert.equal(pi.summaries(), 2);
+  assert.equal(agent.stats().usage.tokens.total, 60);
+  assert.equal(agent.stats().maintenance.state, 'success');
+  assert.equal(state.sections.context_snapshots.size, 1);
+  assert.deepEqual([...state.sections.context_snapshots.values()][0].recovery_plan.goal_asset_ids, ['assets-1']);
+  assert.ok(events.some(event => event.type === 'context_summary_repair'));
+  const responses = (await readEvents(evidence.root)).filter(event => event.type === 'context_summary_response');
+  assert.deepEqual(responses.map(event => event.valid), [false, true]);
+  assert.equal((await audit(evidence.root)).ok, true);
+});
+
 function seedPublic(manager, provider, label) {
   for (let i = 0; i < 2; i++) {
     manager.appendMessage({ role: 'user', content: `${label} public user `.repeat(4000), timestamp: Date.now() });
@@ -106,7 +164,9 @@ test('invalid custom compaction aborts safely without committing a summary or fa
   assert.equal(state.sections.context_snapshots.size, 0);
   assert.equal(pi.session().sessionManager.getEntries().filter(e => e.type === 'compaction').length, 0);
   assert.ok(pi.session().sessionManager.getEntries().some(e => e.type === 'message' && JSON.stringify(e.message.content).includes('INVALID')));
-  assert.equal(pi.summaries(), 1);
+  assert.equal(pi.summaries(), 2, 'one repair is allowed before compaction aborts');
+  assert.equal(agent.stats().maintenance.operation, 'compaction');
+  assert.equal(agent.stats().maintenance.retryInTurns, null, 'failed compaction cannot claim a solving-turn retry');
   assert.equal(pi.requests(), 0);
   await assert.rejects(agent.prompt('继续'), /JSON/);
   assert.equal(pi.requests(), 0);

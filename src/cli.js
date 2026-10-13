@@ -17,6 +17,7 @@ const HELP = `FlagCapturer 0.2 — Pi-based CTF workbench (Node >=22.19)
 ctfbot import <file|folder> [--authorize-model-data --basis <reason>] [--task <text>]
 ctfbot preview <workspace>
 ctfbot solve <workspace> --provider <provider> --model <id> --confirm-model-usage [--interactive]
+ctfbot resume <run-directory> --confirm-model-usage [--provider <provider> --model <id>]
 ctfbot evaluate <dataset.json> --provider <provider> --model <id> --confirm-model-usage
 ctfbot report|diagnose-run|audit|events|recover <run-directory>
 ctfbot replay <run-directory> --confirm-execution [--image <local image>]
@@ -24,7 +25,8 @@ ctfbot ui [file|workspace]
 ctfbot doctor | --help | --version
 
 Options: --image (default ctfbot-tools:candidate), --runs-root, --imports-root,
-         --additional-prompt, --thinking, --json, --output (evaluation results)
+         --skill <name>, --skill-path <directory> (repeatable),
+         --additional-prompt, --thinking, --show-thinking (CLI reasoning text), --json, --output (evaluation results)
          --network-grant (scoped TCP/service grant), --memory (reviewed snapshot)
 No arguments opens the interactive workbench. /login, /model, /thinking configure Pi.
 `;
@@ -73,7 +75,7 @@ async function runSolve(options) {
       onEvent: options.json ? event => {
         // Only public events are printed; raw Pi thinking events never leave this adapter.
         if (['run_started', 'run_finished', 'tool_execution_start', 'tool_execution_end'].includes(event.type)) console.log(JSON.stringify(event));
-      } : terminalObserver()
+      } : terminalObserver(process.stdout, { showThinking: options.showThinking })
     });
     process.exitCode = result.ok ? 0 : result.status === 'cancelled' ? 130 : 1;
     return result;
@@ -128,6 +130,8 @@ async function main() {
       model: {
         type: 'string'
       },
+      'skill-path': { type: 'string', multiple: true },
+      skill: { type: 'string' },
       thinking: {
         type: 'string'
       },
@@ -149,6 +153,7 @@ async function main() {
       'additional-prompt': {
         type: 'string'
       },
+      'show-thinking': { type: 'boolean' },
       interactive: {
         type: 'boolean'
       },
@@ -179,12 +184,15 @@ async function main() {
     workspace: path,
     provider: values.provider ?? process.env.CTFBOT_PROVIDER,
     model: values.model ?? process.env.CTFBOT_MODEL,
-    thinkingLevel: values.thinking ?? 'medium',
+    thinkingLevel: values.thinking,
     confirmModelUsage: values['confirm-model-usage'] === true,
     image: values.image,
     runsRoot: values['runs-root'] ?? 'runs',
+    initialSkill: values.skill,
+    skillPaths: values['skill-path'] ?? [],
     additionalPrompt: values['additional-prompt'] ?? '',
     interactive: values.interactive,
+    showThinking: values['show-thinking'],
     json: values.json,
     output: values.output,
     networkGrant: values['network-grant'],
@@ -200,6 +208,8 @@ async function main() {
         model: values.model ?? process.env.CTFBOT_MODEL,
         thinkingLevel: values.thinking,
         image: values.image,
+        initialSkill: values.skill,
+        skillPaths: values['skill-path'] ?? [],
         runsRoot: values['runs-root'],
         importsRoot: values['imports-root'],
         networkGrant: values['network-grant'],
@@ -224,6 +234,10 @@ async function main() {
     case 'solve':
       invariant(path, 'Specify a workspace');
       result = await runSolve(options);
+      break;
+    case 'resume':
+      invariant(path, 'Specify a saved run directory');
+      result = await runSolve({ ...options, resumeFrom: resolve(path), workspace: undefined });
       break;
     case 'report':
       result = await report(resolve(path));
@@ -252,6 +266,8 @@ async function main() {
       invariant(values['confirm-execution'], 'Pass --confirm-execution to execute recorded commands in a fresh sandbox');
       result = await withCancellation(signal => replay(resolve(path), {
         image: values.image,
+        initialSkill: values.skill,
+        skillPaths: values['skill-path'] ?? [],
         runsRoot: options.runsRoot,
         signal,
         runtimeFactory: config => new DockerRuntime(config)

@@ -68,7 +68,7 @@ test('call IDs preserve correlation and reported durations even when results arr
 
 test('CLI separates public explanation, command calls and results with stable IDs', () => {
   let text = '';
-  const observe = terminalObserver({ write: value => { text += value; } });
+  const observe = terminalObserver({ write: value => { text += value; } }, { showThinking: true });
   observe({ type: 'run_started', run_id: 'test', run_dir: '/tmp/evidence' });
   observe({ type: 'turn_start' });
   observe({ type: 'message_update', assistantMessageEvent: { type: 'thinking_delta', delta: 'PRIVATE' } });
@@ -115,4 +115,29 @@ test('unfamiliar result shapes cannot crash the event subscriber', () => {
   const activity = new ToolActivity();
   activity.start({ toolName: 'unknown', toolCallId: 'broken', args: null });
   assert.doesNotThrow(() => activity.finish({ toolName: 'unknown', toolCallId: 'broken', result: { content: {} } }));
+});
+
+test('CLI default collapses eight thinking fragments into one summary before real tool execution', () => {
+  let text = '';
+  const observe = terminalObserver({ write: value => { text += value; } });
+  observe({ type: 'message_start', message: { role: 'assistant' } });
+  const content = Array.from({ length: 8 }, (_, i) => ({ type: 'thinking', thinking: `Searching candidate ${i}`, thinkingSignature: 'OPAQUE' }));
+  for (let i = 0; i < 8; i++) observe({ type: 'message_update', assistantMessageEvent: { type: 'thinking_delta', contentIndex: i, delta: content[i].thinking } });
+  observe({ type: 'message_end', message: { role: 'assistant', content } });
+  observe({ type: 'tool_execution_start', toolName: 'command_run', toolCallId: 'real', args: { argv: ['file', 'actual.bin'] } });
+  assert.equal(text.split('模型思考').length - 1, 1);
+  assert.match(text, /8 个片段/);
+  assert.doesNotMatch(text, /Searching|OPAQUE/);
+  assert.match(text, /工具 #1/);
+  assert.ok(text.indexOf('模型思考') < text.indexOf('工具 #1'));
+});
+
+test('CLI reports summary start, repair, success and actionable failure independently of tool cards', () => {
+  let text = '';
+  const observe = terminalObserver({ write: value => { text += value; } });
+  observe({ type: 'context_refresh_start' });
+  observe({ type: 'context_summary_repair', reason: 'JSON 格式错误', attempt: 1, maxAttempts: 1 });
+  observe({ type: 'context_refresh_end', updated: true, warnings: [{ message: '失败尝试未排除' }] });
+  observe({ type: 'context_refresh_end', updated: false, errorMessage: '保留上次摘要，2 个模型轮次后重试' });
+  for (const expected of ['开始更新进展', '正在修复（1/1）', '已更新进展摘要', '失败尝试未排除', '2 个模型轮次后重试']) assert.ok(text.includes(expected), expected);
 });

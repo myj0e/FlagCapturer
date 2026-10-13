@@ -5,8 +5,10 @@ import { installReliability } from './reliability.js';
 import { installImages } from './images.js';
 import { installAssets, confinedWorkPath } from './assets.js';
 import { installWorkflows } from './workflows.js';
+import { recordExecution } from '../evidence/provenance.js';
 const argvSchema = s.array(s.text(4096), 64);
 const bytesFormat = s.enum(['utf8', 'hex']);
+const outputSchema = s.array(s.object({ path: s.text(512), display_name: s.text(120, { minLength: 1 }) }, ['path']), 16);
 export async function installCore(registry, {
   workspace,
   runtime,
@@ -48,10 +50,16 @@ export async function installCore(registry, {
     };
   }
   async function command(argv, signal) {
+    const invocation = registry.invocations.getStore();
+    const declaredOutputs = ['command_run', 'script_run'].includes(invocation?.name) ? invocation.args.outputs ?? [] : [];
+    const parents = invocation?.args.input_asset_ids ?? [];
+    state.select('assets', parents);
+    invariant(!declaredOutputs.length || parents.length, 'Declared outputs need input_asset_ids');
+    declaredOutputs.forEach(output => confinedWorkPath(output.path));
     const result = await runtime.execute(argv, {
       signal
     });
-    return {
+    const payload = {
       exit_code: result.code,
       timed_out: result.timedOut,
       truncated: result.truncated,
@@ -69,6 +77,17 @@ export async function installCore(registry, {
         truncated: result.truncated || result.stdout.length > 4096 || result.stderr.length > 4096
       }
     };
+    const execution = await recordExecution(registry, argv, payload);
+    const outputAssets = [];
+    if (execution.succeeded) for (const output of declaredOutputs) outputAssets.push(await assets.capture(output.path, parents, {
+      operation: invocation.name, execution_id: execution.id, producer_binding: 'controller_observed', display_name: output.display_name,
+      controller_proven: false }, signal));
+    return { ...payload, execution_id: execution.id, ...(declaredOutputs.length ? { output_assets: outputAssets } : {}) };
+  }
+  async function start(argv, signal) {
+    const result = await sessions.start(argv, signal);
+    const execution = await recordExecution(registry, argv, { exit_code: null }, { session_id: result.session_id, state: 'started' });
+    return { ...result, execution_id: execution.id };
   }
   define('challenge_list', 'List authorized read-only attachment entries.', s.object({
     path: s.text(512)
@@ -176,18 +195,18 @@ export async function installCore(registry, {
       }
     };
   });
-  define('command_run', 'Run argv inside the offline sandbox; no implicit shell. Foreground deadline 120 s.', s.object({
-    argv: argvSchema
-  }), async ({
+  define('command_run', 'Run argv inside the offline sandbox; no implicit shell. Foreground deadline 120 s. Declare input_asset_ids and outputs to automatically capture generated files and their execution provenance.', s.object({
+    argv: argvSchema, input_asset_ids: s.array(s.text(100), 32), outputs: outputSchema
+  }, ['argv']), async ({
     argv
   }, signal) => command(argv, signal), {
     observe: true
   });
   define('session_start', 'Start a background or interactive argv process; pipes, 30-minute deadline, 16 MiB total output cap.', s.object({
-    argv: argvSchema
-  }), async ({
+    argv: argvSchema, input_asset_ids: s.array(s.text(100), 32)
+  }, ['argv']), async ({
     argv
-  }, signal) => sessions.start(argv, signal), {
+  }, signal) => start(argv, signal), {
     observe: true
   });
   define('session_send', 'Send up to 16 KiB exact base64 bytes to an interactive session.', s.object({
@@ -254,27 +273,28 @@ export async function installCore(registry, {
   };
   const scriptSchema = s.object({
     script_id: s.text(100),
-    args: s.array(s.text(4096), 32)
+    args: s.array(s.text(4096), 32), input_asset_ids: s.array(s.text(100), 32)
   }, ['script_id']);
-  define('script_run', 'Run a saved script with the foreground deadline.', scriptSchema, async (args, signal) => command(scriptArgv(args), signal), {
+  define('script_run', 'Run a saved script with the foreground deadline. Declare input_asset_ids and outputs to capture generation provenance automatically.', { ...scriptSchema, properties: { ...scriptSchema.properties, outputs: outputSchema } }, async (args, signal) => command(scriptArgv(args), signal), {
     observe: true
   });
-  define('script_start', 'Start a saved long-running script; read progress through session_read.', scriptSchema, async (args, signal) => sessions.start(scriptArgv(args), signal), {
+  define('script_start', 'Start a saved long-running script; read progress through session_read.', scriptSchema, async (args, signal) => start(scriptArgv(args), signal), {
     observe: true
   });
   const assets = await installAssets(registry, { workspace, runtime, inputBytes });
+  registry.assets = assets;
   define('artifact_export', 'Export a bounded /work file with declared input lineage.', s.object({
     path: s.text(512),
-    parents: s.array(s.text(512), 16)
-  }), async ({
+    parents: s.array(s.text(512), 16), execution_id: s.text(100)
+  }, ['path', 'parents']), async ({
     path,
-    parents
+    parents, execution_id
   }, signal) => {
     confinedWorkPath(path);
     invariant(parents.length > 0, 'Input lineage is required');
     for (const parent of parents) await inputBytes(parent);
     const parentIds = parents.map(path => [...state.sections.assets.values()].find(a => a.origin === 'input' && a.path === path).id);
-    const asset = await assets.capture(path, parentIds, { operation: 'artifact_export', controller_proven: false }, signal);
+    const asset = await assets.capture(path, parentIds, { operation: 'artifact_export', execution_id, producer_binding: 'model_declared', controller_proven: false }, signal);
     return state.add('checkpoints', { path, parents, artifact: asset.artifact, asset_id: asset.id });
   }, {
     observe: true

@@ -52,3 +52,19 @@ test('asset capture accepts a display label without changing paths or exact byte
   assert.equal(createProgressReader(state)().files[0].name, '恢复的二维码');
   assert.equal((await call('asset_read', { asset_id: captured.id, offset: 0, length: 10, encoding: 'utf8' })).data, 'checkpoint');
 });
+
+test('summary displays maintenance failures, last success and unverified attempts without claiming exclusion', () => {
+  const text = summaryDocument({ progress: { summary: { goal: '解题', unverified_attempts: [{ attempt: 'OCR', result: '未成功', scope: '单次尝试' }] } },
+    contextMaintenance: { state: 'failed', reason: 'JSON 格式错误', retryInTurns: 2, lastSuccessAt: new Date().toISOString() } });
+  for (const expected of ['最近自动整理成功', 'JSON 格式错误', '当前展示上次摘要', '2 个模型轮次后重试', '失败尝试（未排除）', '不能据此排除']) assert.ok(text.includes(expected), expected);
+});
+
+
+test('background summary UI distinguishes input cut, generation time and publication time', () => {
+  const cut = '2026-10-13T01:00:00.000Z', generated = '2026-10-13T01:01:00.000Z', published = '2026-10-13T01:05:00.000Z';
+  const clock = value => new Date(value).toLocaleTimeString('zh-CN', { hour12: false });
+  const text = summaryDocument({ progress: { summary: { goal: '解题', source_turn: 10, source_time: cut, generated_time: generated, time: published } },
+    contextMaintenance: { state: 'running', operation: 'refresh' } });
+  for (const expected of ['后台整理中，解题继续', '摘要覆盖至第 10 轮', '生成于 ' + clock(generated), '取材截至：' + clock(cut)]) assert.ok(text.includes(expected), expected);
+  assert.ok(!text.includes(clock(published)), 'publication time cannot be presented as generation time');
+});

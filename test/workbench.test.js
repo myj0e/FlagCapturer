@@ -687,3 +687,62 @@ test('tool calls update one bounded card with argv, result and duration without 
   app.event({ type: 'run_finished', status: 'cancelled' });
   assert.match(v.entries.filter(x => x.presentation === 'tool').at(-1).text, /已取消/);
 });
+
+test('one reply merges eight thinking blocks, folds by default and keeps actual tool cards visible', async () => {
+  const { view: v } = view();
+  const app = new Workbench({ view: v, catalog: models() });
+  app.event({ type: 'message_start', message: { role: 'assistant' } });
+  const content = Array.from({ length: 8 }, (_, index) => ({ type: 'thinking', thinking: `Testing distinct operation ${index}`, thinkingSignature: 'HIDDEN_SIGNATURE' }));
+  for (let index = 0; index < content.length; index++) {
+    app.event({ type: 'message_update', assistantMessageEvent: { type: 'thinking_delta', contentIndex: index, delta: content[index].thinking } });
+  }
+  assert.equal(v.entries.filter(x => x.kind === '思考').length, 1);
+  assert.match(v.render(120).map(clean).join('\n'), /模型正在思考.*8 个片段/);
+  assert.doesNotMatch(v.render(120).map(clean).join('\n'), /Testing distinct/);
+  // Final response reconciles partial deltas rather than appending a duplicate transcript.
+  content[7].thinking += ' final suffix';
+  app.event({ type: 'message_end', message: { role: 'assistant', content } });
+  const thought = v.entries.find(x => x.kind === '思考');
+  assert.equal(thought.thinkingPending, false);
+  assert.equal(thought.thinkingCount, 8);
+  app.event({ type: 'tool_execution_start', toolName: 'command_run', toolCallId: 'one-tool', args: { argv: ['python3', '-c', 'print("actual operation")'] } });
+  const folded = v.render(120).map(clean).join('\n');
+  assert.match(folded, /模型思考.*8 个片段/);
+  assert.match(folded, /工具 #1/);
+  assert.doesNotMatch(folded, /Testing distinct/);
+  v.toggleThinking();
+  const expanded = v.entries.flatMap(entry => v.renderEntry(entry, 100)).map(clean).join('\n');
+  assert.equal(expanded.split('Testing distinct operation').length - 1, 8);
+  assert.match(expanded, /final suffix/);
+  assert.doesNotMatch(expanded, /HIDDEN_SIGNATURE/);
+  assert.match(expanded, /工具 #1/);
+  v.toggleThinking();
+  const reading = app.dispatch('thoughts', String(thought.thinkingIndex));
+  assert.match(v.modal.document, /final suffix/);
+  v.modal.finish();
+  await reading;
+  app.event({ type: 'message_start', message: { role: 'assistant' } });
+  app.event({ type: 'message_update', assistantMessageEvent: { type: 'thinking_delta', contentIndex: 0, delta: 'Interrupted next reply' } });
+  app.event({ type: 'run_finished', status: 'cancelled' });
+  const thoughts = v.entries.filter(x => x.kind === '思考');
+  assert.equal(thoughts.length, 2);
+  assert.equal(thoughts[1].thinkingInterrupted, true);
+  assert.equal(thoughts[1].thinkingPending, false);
+  assert.notEqual(thoughts[1].thinkingIndex, thought.thinkingIndex);
+  for (const width of [120, 80, 20, 1]) {
+    assert.ok(v.render(width).every(line => visibleWidth(line) <= width));
+  }
+});
+
+test('workbench queues explicit skills during a run and selects an entry while idle', async () => {
+  const data = view(); const app = new Workbench({ view: data.view, catalog: models() });
+  app.availableSkills = async () => ({ skills: [{ name: 'ctf-forensics', description: '取证' }], diagnostics: [] });
+  await app.dispatch('skill:ctf-forensics', '检查结构');
+  assert.equal(app.options.initialSkill, 'ctf-forensics');
+  assert.match(app.guidance, /检查结构/);
+  const queued = [];
+  app.active = Promise.resolve(); app.controls = { steer: async text => queued.push(text) };
+  await app.dispatch('skill:ctf-forensics', '重新检查');
+  assert.deepEqual(queued, ['/skill:ctf-forensics 重新检查']);
+  await assert.rejects(app.dispatch('skill:unknown'), /未知 Skill/);
+});

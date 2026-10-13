@@ -57,7 +57,7 @@ export class ToolProvisioner {
     Object.assign(this, { runtime, evidence, state, input, image, runId, signal, cacheRoot, onEvent, onOwnership, onRelease, runtimeFactory, fetcher, allowDownload });
     this.jobs = new Map(); this.queue = Promise.resolve(); this.controller = new AbortController();
     this.signal = signal ? AbortSignal.any([signal, this.controller.signal]) : this.controller.signal;
-    this.children = new Set(); this.serial = 0;
+    this.children = new Set(); this.serial = Math.max(0, ...[...state.sections.tool_environments.values()].map(item => Number(/^preparation-(\d+)$/.exec(item.preparation_id)?.[1] ?? 0)));
   }
   catalog() {
     return Object.entries(recipes).map(([id, recipe]) => ({ id, title: recipe.title, aliases: recipe.aliases ?? [], supplies: recipe.wheels ?? [], binaries: recipe.binaries, modules: recipe.modules }));
