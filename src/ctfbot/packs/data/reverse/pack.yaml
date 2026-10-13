@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "reverse",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "labels": [
     "reverse"
   ],
@@ -17,7 +17,9 @@
   "optional_binaries": [
     "objdump",
     "readelf",
-    "gdb"
+    "gdb",
+    "upx",
+    "go"
   ],
   "operations": [
     "elf",

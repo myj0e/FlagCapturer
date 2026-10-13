@@ -125,7 +125,11 @@ ENVIRONMENT = r'''
 import importlib.util,json,pathlib,shutil,sys
 inventory_path=pathlib.Path('/opt/ctfbot/inventory.json')
 inventory=json.loads(inventory_path.read_text()) if inventory_path.is_file() else {}
-print(json.dumps({'python':sys.version,'binaries':{name:shutil.which(name) for name in sys.argv[1:]},
+binaries={name:shutil.which(name) for name in sys.argv[1:]}
+print(json.dumps({'python':sys.version,'binaries':binaries,
+                  'missing_binaries':[name for name,path in binaries.items() if path is None],
+                  'external_tools':inventory.get('external_tools',{}),
+                  'runtime_constraints':inventory.get('runtime_constraints',{}),
                   'optional_modules':{name:importlib.util.find_spec(name) is not None for name in
                   ('PIL','pwn','sympy','Crypto','gmpy2','z3','capstone','unicorn','elftools','pefile',
                    'numpy','scipy','requests','bs4','lxml','scapy','magic','construct','bitstring','dpkt','pyshark')},

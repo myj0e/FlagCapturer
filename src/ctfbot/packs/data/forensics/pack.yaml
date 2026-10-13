@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "forensics",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "labels": [
     "forensics"
   ],
@@ -17,7 +17,14 @@
   "optional_binaries": [
     "file",
     "exiftool",
-    "tshark"
+    "tshark",
+    "veracrypt",
+    "cryptsetup",
+    "bkcrack",
+    "fcrackzip",
+    "john",
+    "zip2john",
+    "hashcat"
   ],
   "operations": [
     "triage",

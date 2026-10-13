@@ -1,8 +1,10 @@
-# 通用解题镜像 general-v2
+# 通用解题镜像 general-v3
 
 `ctfbot-tools` 从最小本机文件导出升级为独立工具箱，源码在 `docker/tooling/`。
 Python 3.12 官方 Debian Bookworm 基础镜像固定 digest；与 controller 的 Python
 版本独立。构建时可联网下载 Debian 包及哈希锁定的 Python 依赖；解题时不安装依赖。
+
+本次新增 UPX、Go、VeraCrypt console 与 cryptsetup；历史缺失工具、清理和验收记录见 [general-v3 实施记录](sandbox-tools-v3.md)。
 
 当前 TUI 默认使用 `ctfbot-tools:candidate`，解析为不可变 image ID；无需重新标记为 `local`。下方提升为 `local` 的命令和验收记录保留历史含义。
 
@@ -10,10 +12,10 @@ Python 3.12 官方 Debian Bookworm 基础镜像固定 digest；与 controller �
 
 | 用途 | 工具和环境 |
 |---|---|
-| 脚本与基础操作 | Python/pip/venv、Bash、coreutils、grep/sed/awk、jq；Node/npm、Ruby、Perl、Java JRE |
-| 整数分解 | YAFU 3.1.9（源码固定到 commit `54c5e8d4c21c8c994421d0c95c16aa6f3bd0280a`，包含 SIQS） |
-| Reverse / Pwn | file、strings、xxd、hexdump、binutils、GDB、GCC/G++/make、NASM、patchelf、strace/ltrace、x86 32/64 位运行库、QEMU user |
-| 密码与约束 | PyCryptodome、sympy、gmpy2、z3-solver、NumPy、SciPy |
+| 脚本与基础操作 | Python/pip/venv、Bash、coreutils、grep/sed/awk、jq；Go、Node/npm、Ruby、Perl、Java JRE |
+| 整数分解 | coreutils factor、YAFU 3.1.9（源码固定到 commit `54c5e8d4c21c8c994421d0c95c16aa6f3bd0280a`，包含 SIQS） |
+| Reverse / Pwn | file、strings、xxd、hexdump、binutils、GDB、GCC/G++/make、NASM、UPX、patchelf、strace/ltrace、x86 32/64 位运行库、QEMU user |
+| 密码与约束 | PyCryptodome、sympy、gmpy2、z3-solver、NumPy、SciPy；VeraCrypt console、cryptsetup（用户态文件分析） |
 | 二进制 Python | pwntools、capstone、unicorn、pyelftools、pefile、construct、bitstring |
 | 图片、取证、归档 | Pillow、ExifTool、binwalk、steghide、foremost、zip/unzip、7z、xz/bzip2/zstd |
 | 网络文件分析 | tshark、tcpdump、scapy、dpkt、pyshark；requests、BeautifulSoup、lxml |
@@ -30,17 +32,18 @@ Python 解题脚本；附件位于只读 `/challenge`，生成文件写入 `/wor
 
 ```sh
 .venv/bin/python doc/phase-d/build_tool_image.py \
-  --output data/acceptance/<新的构建目录>
+  --tag ctfbot-tools:build --output data/acceptance/<新的构建目录>
 # 查看 build.json 中的 image 值，后续只使用该不可变 ID
 .venv/bin/python doc/phase-d/verify_tool_image.py \
   --image sha256:<候选镜像ID> --output data/acceptance/<新的工具验收目录>
 .venv/bin/python doc/phase-d/verify_workflows.py \
   --image sha256:<候选镜像ID> --output data/acceptance/<新的六类验收目录>
 # 审阅上述记录均通过后，标记为本机默认工具箱
+docker tag sha256:<候选镜像ID> ctfbot-tools:candidate
 docker tag sha256:<候选镜像ID> ctfbot-tools:local
 ```
 
-TUI 默认仅 inspect 本机 `ctfbot-tools:candidate`，检查 general-v2 标签、无匿名卷和不可变 ID；
+TUI 默认仅 inspect 本机 `ctfbot-tools:candidate`，检查 general-v3 标签、无匿名卷和不可变 ID；
 不会在启动时自动 pull/build/install。可在 Runtime 字段显式选择其他固定 ID。
 原 `ctfbot-c3-fixture` 服务镜像及受审 C3/C4 profile 不随工具镜像升级而变更；
 固定服务 profile 仍须使用它验收过的 solver 镜像，不能直接替换为新工具箱。
@@ -59,6 +62,11 @@ Debian 仓库没有固定到历史快照，重新构建可能取得更新的 Deb
 包保留 distribution metadata；本次为本机使用，未完成对外分发许可证审计。
 
 ## 验收范围与限制
+
+2026-10-09：general-v3 已构建并提升为 `candidate` 和 `local`，六种历史缺失工具
+全部可用。15 组真实 Docker 功能/隔离验收通过，六类 workflow 与 holdout 均 6/6
+完成候选记录，命令回放匹配；自动回归 283 passed、1 个 smoke 用例排除。
+新 image 与完整记录见 [general-v3 实施记录](sandbox-tools-v3.md)。
 
 2026-10-08：general-v2 已在本机完成构建和验收，提升为 `ctfbot-tools:local`。
 实际 Python 为 **3.12.15**，声明的 21 个主要 Python 模块均可导入，11 组功能与

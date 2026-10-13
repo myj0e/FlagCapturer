@@ -15,7 +15,7 @@ from ctfbot.tui.app import CTFBotApp
 
 IMAGE = "sha256:" + "a" * 64
 MANUAL = "sha256:" + "b" * 64
-LABELS = '{"org.ctfbot.tooling.profile":"general-v2"}\n'
+LABELS = '{"org.ctfbot.tooling.profile":"general-v3"}\n'
 
 
 @pytest.mark.parametrize("stdout,code,expected", [

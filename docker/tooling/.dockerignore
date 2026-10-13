@@ -2,3 +2,5 @@
 !Dockerfile
 !requirements.lock
 !inventory.py
+!install_extra_tools.sh
+!hashcat.sh

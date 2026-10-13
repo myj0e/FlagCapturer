@@ -38,8 +38,8 @@ def resolve_runtime_image() -> RuntimeImageChoice:
         if json.loads(volumes) not in (None, {}):
             raise ValueError("anonymous volumes are unsupported")
         labels = json.loads(labels_json)
-        if not isinstance(labels, dict) or labels.get("org.ctfbot.tooling.profile") != "general-v2":
-            raise ValueError("expected the general-v2 toolbox")
+        if not isinstance(labels, dict) or labels.get("org.ctfbot.tooling.profile") != "general-v3":
+            raise ValueError("expected the general-v3 toolbox")
     except (ValueError, TypeError):
-        return RuntimeImageChoice(message="Local toolbox is outdated or invalid. Build and accept general-v2 following doc/phase-d/tool-image.md, then preview again, or select a pinned image manually.")
+        return RuntimeImageChoice(message="Local toolbox is outdated or invalid. Build and accept general-v3 following doc/phase-d/tool-image.md, then preview again, or select a pinned image manually.")
     return RuntimeImageChoice(image=image, message="General CTF toolbox selected automatically. Preview the challenge before running.")

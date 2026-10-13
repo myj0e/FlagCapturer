@@ -21,7 +21,7 @@ def build(output: Path, tag: str, base: str = BASE):
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
     context = Path(__file__).resolve().parents[2] / "docker" / "tooling"
     subprocess.run(["docker", "build", "--pull=false", "--build-arg", f"BASE_IMAGE={base}",
-                    "--progress=plain", "-t", tag, str(context)], check=True, timeout=1800)
+                    "--progress=plain", "-t", tag, str(context)], check=True, timeout=7200)
     image = subprocess.run(["docker", "image", "inspect", "--format", "{{.Id}}", tag],
                            check=True, capture_output=True, text=True).stdout.strip()
     result = subprocess.run(["docker", "run", "--rm", "--pull=never", "--network=none",
@@ -33,7 +33,7 @@ def build(output: Path, tag: str, base: str = BASE):
     (output / "inventory.json").write_text(json.dumps(inventory, indent=2) + "\n")
     receipt = dict(schema_version=2, image=image, tag=tag, base=base,
                    context=str(context), sources={name: hashlib.sha256((context/name).read_bytes()).hexdigest()
-                   for name in ("Dockerfile", "requirements.in", "requirements.lock", "inventory.py")},
+                   for name in ("Dockerfile", "requirements.in", "requirements.lock", "inventory.py", "install_extra_tools.sh", "hashcat.sh")},
                    scope="candidate build only; run verify_tool_image.py before promotion",
                    reproducibility="base digest and Python hashes pinned; Debian package versions recorded, repositories not frozen")
     (output / "build.json").write_text(json.dumps(receipt, indent=2) + "\n")
@@ -45,7 +45,7 @@ def build(output: Path, tag: str, base: str = BASE):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--tag", default="ctfbot-tools:candidate")
+    parser.add_argument("--tag", default="ctfbot-tools:build")
     parser.add_argument("--base", default=BASE)
     args = parser.parse_args()
     build(args.output, args.tag, args.base)
