@@ -36,6 +36,7 @@ const hints = {
   thinking: '[level]',
   import: '<file|workspace>',
   resume: '<run-directory>',
+  target: '<URL|连接命令|自然语言说明>',
   network: '<grant.json|off>',
   memory: '<snapshot.json|off>'
 };

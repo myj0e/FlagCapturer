@@ -107,8 +107,8 @@ print(json.dumps(result))`;
     const unmet = capabilities ? { binaries: capabilities.missing_binaries.filter(name => required.includes(name)), modules: capabilities.missing_modules } : null;
     return { ...execution, capabilities, unmet_required: unmet, method_id, pack, environment: registry.state.identity.image,
       status: execution.exit_code !== 0 || !capabilities ? 'failed' : unmet.binaries.length || unmet.modules.length ? 'missing_capability' : 'observed',
-      network_tools: ['http_request', 'remote_tcp_exchange'].filter(name => registry.definitions.has(name)),
-      limitation: 'Version output/importability is not API compatibility proof. No browser, TLS, RPC or unrestricted networking is implied.' };
+      network_tools: ['web_request', 'browser_open', 'remote_open', 'ssh_open', 'network_status', 'network_relay', 'http_request', 'remote_tcp_exchange'].filter(name => registry.definitions.has(name)),
+      limitation: 'Version output/importability is not API compatibility proof. Network tools still require a current target grant; browser/SSH availability is checked on actual startup. Unrestricted networking is never implied.' };
   }, { observe: true });
   registry.define('workflow_run', 'Run a contracted sandbox operation on path OR asset_id, or ordered asset_ids for reassemble. Results distinguish observations, partial coverage, unsupported input and failures; captures full derived assets.', s.object({
     pack: s.enum(categories), operation: s.text(80), path: s.text(512), asset_id: s.text(100),

@@ -9,7 +9,9 @@ import { ModelCatalog } from '../pi/catalog.js';
 import { authenticationErrorMessage, safeModelError } from '../pi/auth-errors.js';
 import { solve } from '../application/solve.js';
 import { inspectResume, listResumable } from '../application/resume.js';
-import { importFile, preview } from '../challenge/workspace.js';
+import { importFile, importRemote, preview } from '../challenge/workspace.js';
+import { parseConnectionDescription, connectionSummary } from '../challenge/connection.js';
+import { publicUrl } from '../urls.js';
 import { report } from '../application/report.js';
 import { readRegular, invariant } from '../util.js';
 import { summaryDocument } from './solving-summary.js';
@@ -17,8 +19,8 @@ import { ToolActivity, toolCardText, provisioningText } from './activity.js';
 import { WorkbenchView, clean } from './workbench-view.js';
 import { openBrowser } from './browser.js';
 import { createWorkbenchAutocomplete, findFd, pathArgument } from './autocomplete.js';
-export const COMMANDS = [['skills', '查看可用 Skill'], ['menu', '打开操作菜单'], ['login', '配置 API key 或登录服务'], ['model', '选择服务与模型'], ['thinking', '选择思考强度'], ['thoughts', '查看思考原文 [编号]'], ['import', '导入附件或打开 workspace'], ['run', '开始解题'], ['resume', '选择记录，恢复解题'], ['stop', '停止、保存续接记录并清理'], ['summary', '阅读完整解题进展'], ['state', '查看业务状态'], ['flags', '查看全部候选'], ['writeup', '阅读解题报告'], ['report', '生成并阅读运行报告'], ['endpoint', '添加自定义 API'], ['image', '选择本地工具镜像'], ['network', '设置网络授权文件 / off'], ['memory', '设置受审记忆 / off'], ['logout', '移除服务的已保存凭据'], ['help', '查看操作说明'], ['quit', '退出工作台']];
-const HELP = `配置：/login [provider] [oauth|api_key] → /model → /thinking\n题目：/import <附件或 workspace 路径> → /run\n\n/skills 查看指南，/skill:名称 [要求] 显式使用；空闲时选择下次运行的 Skill。\n输入普通文字保存补充要求；运行时直接发送给 agent。Enter 发送，Shift+Enter 换行。/ 指令补全，Tab 接受，↑↓ 选择，Esc 关闭；路径与 @ 引用支持文件补全。\nCtrl+P 打开菜单，F4 展开/折叠思考；/thoughts [编号] 阅读原文。F3 切换日志与摘要浏览（窄屏打开全文），PgUp/PgDn 翻页，Ctrl+C 停止当前操作；空闲时退出。\n\n/run 会再次确认题目、模型和数据发送授权。/stop 会等待进程与容器清理。\n运行中可以改变思考强度，更换模型或登录服务需要先停止。\n\n/state [section] [id|latest] 查看状态、产物和实验，/flags 查看候选；/writeup、/report 在终端内阅读结果。\n/endpoint 添加兼容 API；也会发现已有 Pi models.json 的自定义服务。\n\n${COMMANDS.map(([name, description]) => `/${name}  ${description}`).join('\n')}`;
+export const COMMANDS = [['skills', '查看可用 Skill'], ['menu', '打开操作菜单'], ['login', '配置 API key 或登录服务'], ['model', '选择服务与模型'], ['thinking', '选择思考强度'], ['thoughts', '查看思考原文 [编号]'], ['import', '导入附件或打开 workspace'], ['target', '创建远端题目：URL、连接命令或自然语言'], ['run', '开始解题'], ['resume', '选择记录，恢复解题'], ['stop', '停止、保存续接记录并清理'], ['summary', '阅读完整解题进展'], ['state', '查看业务状态'], ['flags', '查看全部候选'], ['writeup', '阅读解题报告'], ['report', '生成并阅读运行报告'], ['endpoint', '添加自定义 API'], ['image', '选择本地工具镜像'], ['network', '查看授权 / add URL / revoke ID / 授权文件 / off'], ['memory', '设置受审记忆 / off'], ['logout', '移除服务的已保存凭据'], ['help', '查看操作说明'], ['quit', '退出工作台']];
+const HELP = `配置：/login [provider] [oauth|api_key] → /model → /thinking\n题目：/import <附件或 workspace 路径> 或 /target <目标地址或连接说明> → /run\n\n/skills 查看指南，/skill:名称 [要求] 显式使用；空闲时选择下次运行的 Skill。\n输入普通文字保存补充要求；运行时直接发送给 agent。Enter 发送，Shift+Enter 换行。/ 指令补全，Tab 接受，↑↓ 选择，Esc 关闭；路径与 @ 引用支持文件补全。\nCtrl+P 打开菜单，F4 展开/折叠思考；/thoughts [编号] 阅读原文。F3 切换日志与摘要浏览（窄屏打开全文），PgUp/PgDn 翻页，Ctrl+C 停止当前操作；空闲时退出。\n\n/run 会再次确认题目、模型和数据发送授权。/stop 会等待进程与容器清理。\n运行中可以改变思考强度，更换模型或登录服务需要先停止。\n\n/state [section] [id|latest] 查看状态、产物和实验，/flags 查看候选；/writeup、/report 在终端内阅读结果。\n/endpoint 添加兼容 API；也会发现已有 Pi models.json 的自定义服务。\n\n${COMMANDS.map(([name, description]) => `/${name}  ${description}`).join('\n')}`;
 
 /** Coordinates the UI with application services; never implements an agent loop. */
 export class Workbench {
@@ -61,7 +63,7 @@ export class Workbench {
     });
     this.view.editor.setAutocompleteProvider(this.autocomplete);
     this.refreshSelection();
-    view.log('工作台', '先用 /login 配置服务、/model 选择模型，再 /import 导入题目。Ctrl+P 打开菜单。');
+    view.log('工作台', '先用 /login 配置服务、/model 选择模型，再 /import 导入附件或 /target 创建远端题目。Ctrl+P 打开菜单。');
   }
   refreshSelection() {
     if (this.view.state.provider !== this.options.provider || this.view.state.model !== this.options.model) this.view.state.context = undefined;
@@ -181,6 +183,9 @@ export class Workbench {
       case 'import':
         this.idle();
         return this.openChallenge(arg);
+      case 'target':
+        this.idle();
+        return this.openRemote(arg);
       case 'run':
         return this.run();
       case 'resume':
@@ -209,6 +214,7 @@ export class Workbench {
         return this.document('report.md');
       case 'image':
       case 'network':
+        if (command === 'network' && (this.controls || /^(add|revoke)(?: |$)/.test(arg ?? ''))) return this.networkCommand(arg);
       case 'memory':
         {
           this.idle();
@@ -468,6 +474,42 @@ export class Workbench {
     this.refreshSelection();
     await this.persist();
   }
+  async openRemote(value) {
+    value ??= await this.view.ask('目标地址或连接说明（URL、nc/socat/ssh 命令、自然语言）');
+    const parsed = parseConnectionDescription(value);
+    const task = await this.view.ask('题目目标', { value: '分析授权的 CTF 服务，找出 Flag，并用中文编写解题报告' });
+    const yes = await this.view.choose('远端题目数据发送授权', [{ id: 'no', label: '取消' }, { id: 'yes', label: '允许向所选模型发送本题内容和远端输出' }], { confirmation: true, detail: `连接说明：${parsed.connection.description}\n${connectionSummary(parsed.connection)}\n运行前将确认实际允许连接的目标。` });
+    if (yes !== 'yes') return;
+    const checked = await importRemote(value, this.options.importsRoot, { task, authorized: true, basis: '用户在工作台明确授权本题与远端输出发送给所选模型' });
+    this.workspace = checked; this.controls = null; this.options.targets = checked.manifest.targets;
+    this.view.state.challenge = checked.manifest.id; this.view.state.consent = true; this.view.state.progress = { task: checked.task };
+    this.view.log('题目', `已创建远端题目：${parsed.connection.description}\n${connectionSummary(parsed.connection)}\n/run 开始`);
+  }
+  async confirmNetwork(request, signal) {
+    const hostKey = request.kind?.startsWith('ssh_host_key');
+    const changedKey = request.kind === 'ssh_host_key_changed';
+    const detail = hostKey ? `SSH 主机：${request.target.host}:${request.target.port}\n${changedKey ? `已固定指纹：${request.expected_fingerprint}\n` : ''}新指纹：${request.fingerprint}${changedKey ? '\n确认将替换本次运行的旧指纹。' : ''}` : `目标：${request.target.host}:${request.target.port}\nIP：${request.target.ips.join('、')}\n能力：${request.target.capabilities.join('、')}\n到期：${request.target.expires_at}`;
+    try { return await this.view.choose(changedKey ? 'SSH 主机指纹已变化' : hostKey ? '确认 SSH 主机指纹' : '允许访问目标服务', [{ id: 'no', label: '拒绝' }, { id: 'yes', label: changedKey ? '确认替换指纹' : '允许本次运行使用' }], { confirmation: true, detail, signal }) === 'yes'; }
+    catch (error) { if (signal?.aborted) throw error; return false; }
+  }
+  async networkCommand(arg) {
+    invariant(this.controls, '请先开始运行；初始目标可用 /target 配置');
+    if (!arg) return this.view.showDocument('当前网络授权', JSON.stringify(this.controls.network(), null, 2));
+    if (arg.startsWith('add ')) { const result = await this.controls.grantTarget(arg.slice(4).trim()); this.view.log('网络', JSON.stringify(result)); return; }
+    if (arg.startsWith('revoke ')) { await this.controls.revokeTarget(arg.slice(7).trim()); this.view.log('网络', '目标权限已撤销，相关连接已关闭'); return; }
+    if (arg === 'off') { for (const target of this.controls.network().filter(t => t.state === 'active')) await this.controls.revokeTarget(target.id); this.view.log('网络', '已撤销全部目标'); return; }
+    throw new Error('用法：/network [add URL | revoke ID | off]');
+  }
+  piUIContext() {
+    return {
+      confirm: async (title, message, opts = {}) => { try { return await this.view.choose(title, [{ id: 'no', label: '拒绝' }, { id: 'yes', label: '允许' }], { confirmation: true, detail: message, signal: opts.signal }) === 'yes'; } catch { return false; } },
+      select: async (title, values, opts = {}) => this.view.choose(title, values.map(value => ({ id: value, label: value })), { signal: opts.signal }),
+      input: (title, placeholder, opts = {}) => this.view.ask(title, { value: placeholder, signal: opts.signal }),
+      notify: (message, type) => this.view.log(type ?? '提示', message),
+      setStatus: () => {}, setWidget: () => {}, setWorkingMessage: () => {}, setWorkingVisible: () => {}, setWorkingIndicator: () => {}, setHiddenThinkingLabel: () => {}, setFooter: () => {}, setHeader: () => {}, onTerminalInput: () => () => {},
+      custom: async () => { throw new Error('Use workbench dialogs for custom UI'); }
+    };
+  }
   async openChallenge(source) {
     source ??= await this.view.ask('附件文件或已有 workspace 路径');
     source = pathArgument(source);
@@ -506,8 +548,11 @@ export class Workbench {
         basis
       });
     }
+    const replacingWorkspace = Boolean(this.workspace);
     this.workspace = checked;
     this.controls = null;
+    if (checked.manifest.targets?.length) this.options.targets = checked.manifest.targets;
+    else if (replacingWorkspace) this.options.targets = [];
     this.view.summaryScroll = 0;
     this.view.summaryFocused = false;
     Object.assign(this.view.state, {
@@ -528,6 +573,8 @@ export class Workbench {
     }
     const saved = await inspectResume(directory);
     this.workspace = await this.previewChallenge(saved.workspace, { requireAuthorization: true });
+    // Target hints belong to the resumed task; every endpoint must be approved again in the new run.
+    this.options.targets = this.workspace.manifest.targets ?? [];
     if (!this.model) {
       this.options.provider = saved.selection.provider;
       this.options.model = saved.selection.model;
@@ -540,11 +587,12 @@ export class Workbench {
   }
   async run(resumeOptions = {}) {
     this.idle();
-    invariant(this.workspace, '请先 /import 导入题目');
+    invariant(this.workspace, '请先 /import 导入附件或 /target 添加远端题目');
     invariant(this.workspace.authorized, '此 workspace 尚未授权模型传输，请重新导入并明确授权');
     invariant(this.model, '请先 /model 选择模型');
     const configured = this.catalog.runtime.getProviderAuthStatus(this.model.provider).configured;
     invariant(configured, '此服务尚未配置认证，请先 /login');
+    const targets = this.options.targets?.length ? this.options.targets : this.workspace.manifest?.targets ?? [];
     const answer = await this.view.choose(resumeOptions.resumeFrom ? '续接本次解题' : '开始本次解题', [{
       id: 'no',
       label: '返回'
@@ -553,9 +601,11 @@ export class Workbench {
       label: '开始，允许使用模型额度'
     }], {
       confirmation: true,
-      detail: `题目：${this.workspace.root}\n模型：${this.model.provider}/${this.model.id}\nAPI：${this.model.baseUrl}\n思考：${this.options.thinkingLevel}\n${resumeOptions.resumeFrom ? '续接：恢复已保存会话与文件；旧进程不恢复，当前网络授权重新校验。\n' : ''}附件与工具输出将发送给该服务。`
+      detail: `题目：${this.workspace.root}\n模型：${this.model.provider}/${this.model.id}\nAPI：${this.model.baseUrl}\n思考：${this.options.thinkingLevel}\n${resumeOptions.resumeFrom ? '续接：恢复已保存会话与文件；旧进程不恢复，当前网络授权重新校验。\n' : ''}附件与工具输出将发送给该服务。${this.workspace.manifest?.connection ? '\n连接要求：' + connectionSummary(this.workspace.manifest.connection) : ''}${targets.length ? '\n允许连接目标服务：' + targets.map(publicUrl).join('、') : '\n尚无初始网络授权；运行中申请缺失目标。'}`
     });
     if (answer !== 'yes') return;
+    this.options.targets = targets;
+    this.options.authorizeNetwork = targets.length > 0;
     const controller = new AbortController();
     const started = Date.now();
     this.controller = controller;
@@ -590,6 +640,8 @@ export class Workbench {
         additionalPrompt: this.guidance,
         confirmModelUsage: true,
         modelRuntime: this.catalog.runtime,
+        onNetworkRequest: (request, signal) => this.confirmNetwork(request, signal),
+        piUIContext: this.piUIContext(),
         signal: controller.signal,
         onReady: controls => {
           this.controls = controls;
@@ -619,6 +671,7 @@ export class Workbench {
       try {
         this.view.state.candidates = this.controls.candidates();
         this.view.state.progress = this.controls.progress?.();
+        this.view.state.networkTargets = this.controls.network?.();
         const stats = this.controls.stats();
         this.view.state.usage = stats.usage;
         if (stats.maintenance) this.view.state.contextMaintenance = stats.maintenance;
@@ -712,6 +765,9 @@ export class Workbench {
       this.view.state.currentActivity = { id: event.toolCallId, purpose: activity.purpose };
       activity.entry = this.view.log('工具', toolCardText(activity));
       activity.entry.presentation = 'tool';
+    } else if (event.type === 'tool_execution_update') {
+      const activity = this.toolActivity.update(event);
+      if (activity?.entry) activity.entry.text = clean(toolCardText(activity));
     } else if (event.type === 'tool_execution_end') {
       const activity = this.toolActivity.finish(event);
       this.updateToolCard(activity);

@@ -119,7 +119,12 @@ export async function restoreExecutionState(state, evidence, runtime, signal) {
   const environments = [...new Map([...state.sections.tool_environments.values()].map(item => [item.preparation_id, item])).values()];
   for (const item of environments) if (item.state !== 'interrupted') await state.add('tool_environments', { ...item, state: 'interrupted',
     reason: 'Historical environment is inactive after resume; request capabilities again.' });
-  const report = { plan, restored, unresolved, historical_environments: environments.map(item => ({ environment_id: item.environment_id, capabilities: item.capabilities })),
+  const snapshot = [...state.sections.context_snapshots.values()].at(-1);
+  const recovery_guide = { route: snapshot?.memory.route ?? '', steps: snapshot?.memory.recovery_steps ?? [],
+    policy: 'Actively reconstruct progress using evidence-backed historical steps and saved scripts. Recheck prerequisites and expected observations. Reacquire volatile connection/login/ASLR/menu state. On divergence return to the nearest verified checkpoint, adapt, and continue; do not loop over the entire old route or blindly replay mutations.',
+    historical_only: true, source_revision: snapshot?.source_revision ?? null,
+    recent_experiments: [...state.sections.experiments.values()].slice(-4).map(e => ({ id: e.id, purpose: e.purpose, reported_result: e.reported_result, observation_ids: e.observation_ids })) };
+  const report = { plan, restored, unresolved, recovery_guide, historical_environments: environments.map(item => ({ environment_id: item.environment_id, capabilities: item.capabilities })),
     notice: 'Fresh sandbox. Previous sessions, processes and tool environment IDs are inactive. Use tool_request to prepare capabilities again. Only saved files were restored; unexported temporary files are unavailable. No historical command was automatically executed.' };
   await state.add('recovery_plans', { ...report, kind: 'resume_result' });
   return report;

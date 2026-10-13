@@ -37,12 +37,12 @@ export class ToolRegistry {
     });
   }
   // Also serialize direct application callers, independent of Pi's sequential execution setting.
-  invoke(name, args, signal) {
-    const pending = this.queue.then(() => this.execute(name, args, signal));
+  invoke(name, args, signal, onUpdate, toolCallId) {
+    const pending = this.queue.then(() => this.execute(name, args, signal, onUpdate, toolCallId));
     this.queue = pending.catch(() => {});
     return pending;
   }
-  async execute(name, args, signal) {
+  async execute(name, args, signal, onUpdate, toolCallId) {
     invariant(!this.state.completion, 'No tools allowed after run completion');
     signal?.throwIfAborted();
     const tool = this.definitions.get(name);
@@ -59,7 +59,7 @@ export class ToolRegistry {
       request
     });
     try {
-      let payload = await this.invocations.run({ name, args, request }, () => tool.handler(args, signal));
+      let payload = await this.invocations.run({ name, args, request, toolCallId }, () => tool.handler(args, signal, onUpdate));
       const previous = repeatableExecution.has(name) && this.executionRequests.get(request.sha256);
       if (previous && !this.repeatNotices.has(request.sha256)) {
         payload = { ...payload, request_history: { previous_observation_id: previous,

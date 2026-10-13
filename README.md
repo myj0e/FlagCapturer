@@ -94,3 +94,7 @@ node src/cli.js evaluate ./dataset.json \
 继续开发后，80 项普通测试、13 项集成测试及模块检查通过。测试覆盖真实 Pi + Docker 合成解题、自动上下文压缩后状态恢复、多模态 provider 边界的图片传递、运行中 Stop、立即关闭交互会话、工作流、超时、输出限制、TCP 断流与取消、本地服务授权到期、回放和恢复清理，没有发送真实模型请求。详见 [开发验收记录](docs/development-validation.md)；依赖准备与权限边界见 [权限准备记录](docs/permission-preparation.md)。真实收费 provider、其图片协议序列化、真实比赛远端与解题率尚未验收。
 
 支持 Pi 原生 Skills：`/skills` 查看，`/skill:ctf-forensics` 显式选用。已吸收固定版本的 [ljagiello/ctf-skills](https://github.com/ljagiello/ctf-skills) 分类知识，并适配沙箱和证据机制；不会执行上游全量安装器。CLI 可用 `--skill <name>`、`--skill-path <directory>`。详见 [Skills 说明](docs/skills.md)。
+
+Web/Pwn 远端解题支持 `/target`、动态目标授权、HTTP 会话、隔离 Chromium、持久 TCP、SSH 与 pwntools relay。Docker 保持断网，resume 沿历史有效路线主动重建远端进度。用法见 [远端解题](docs/remote-solving.md)。
+
+`/target` 接受 URL、`nc`/`socat`/`ssh` 连接命令和自然语言说明，可描述多个服务与连接顺序；运行前展示提取出的目标，连接要求与脱敏路径会传给 Agent。

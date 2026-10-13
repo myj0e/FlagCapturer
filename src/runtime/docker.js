@@ -55,6 +55,8 @@ export class DockerRuntime {
     runner = runProcess,
     sessionsFactory,
     extension,
+    networkSocket,
+    networkSocketWritable = false,
     onLost = () => {}
   } = {}) {
     this.input = input;
@@ -64,6 +66,8 @@ export class DockerRuntime {
     this.runner = runner;
     this.sessionsFactory = sessionsFactory;
     this.extension = extension;
+    this.networkSocket = networkSocket;
+    this.networkSocketWritable = networkSocketWritable;
     this.name = `ctfbot-${randomUUID()}`;
     this.started = false;
     this.created = false;
@@ -84,6 +88,11 @@ export class DockerRuntime {
       // Controller-only configuration; no model-provided mount arguments.
       extra.push('--mount', `type=bind,source=${root},target=/opt/ctf-extension${this.extension.writable ? '' : ',readonly'}`);
       if (!this.extension.writable) extra.push('--env', 'PYTHONPATH=/opt/ctf-extension/site');
+    }
+    if (this.networkSocket) {
+      const root = await realpath(this.networkSocket);
+      invariant(!/[,\r\n]/.test(root), 'Unsupported network socket mount path');
+      extra.push('--mount', `type=bind,source=${root},target=/run/ctf-network${this.networkSocketWritable ? '' : ',readonly'}`);
     }
     const result = await this.runner('docker', ['create', '--name', this.name, '--pull=never', '--label', `flagcapturer.run=${this.runId}`, '--network=none', '--read-only', '--cpus=2', '--memory=2g', '--memory-swap=2g', '--pids-limit=256', '--user', `${uid}:${gid}`, '--cap-drop=ALL', '--security-opt=no-new-privileges:true', '--env', 'HOME=/tmp', '--env', 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', '--tmpfs', `/tmp:rw,nosuid,nodev,size=64m,uid=${uid},gid=${gid}`, '--tmpfs', `/work:rw,exec,nosuid,nodev,size=1g,uid=${uid},gid=${gid},mode=0700`, '--mount', `type=bind,source=${source},target=/challenge,readonly`, ...extra, '--workdir=/work', '--entrypoint=/bin/sh', this.image, '-c', 'mkdir -p /work/.control && exec sleep infinity'], {
       signal

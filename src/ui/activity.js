@@ -12,6 +12,10 @@ export function logPreview(value, limit = 900, lines = 6) {
   return selected.length > limit || text.split('\n').length > lines ? selected.slice(0, limit) + '\n…（已省略，完整内容见运行证据）' : selected;
 }
 const purposes = {
+  network_status: '查看目标网络权限', network_request: '申请目标服务访问权限', network_revoke: '撤销目标权限', network_relay: '为沙箱脚本准备受控连接',
+  remote_open: '连接远端服务', remote_send: '向远端发送数据', remote_read: '读取远端响应', remote_shutdown: '结束远端发送方向', remote_close: '关闭远端连接',
+  web_request: '访问或提交网页请求', http_session: '管理网页登录会话', web_cookie_sync: '同步本题登录状态', browser_open: '启动隔离浏览器', browser_action: '操作并分析网页',
+  ssh_relay: '将 SSH 通道交给沙箱脚本', ssh_open: '登录 SSH 题目服务', ssh_exec: '执行远端命令', ssh_shell: '打开远端终端', ssh_read: '读取远端终端输出', ssh_send: '向远端终端发送数据', ssh_transfer: '传输题目文件', ssh_close: '关闭 SSH 会话',
   tool_request: '检查或准备所需工具', tool_status: '查看工具准备状态', tool_exec: '在已验证环境中执行分析',
   challenge_list: '查看题目附件清单', challenge_read_text: '读取附件文本', challenge_read_bytes: '查看附件的指定字节',
   artifact_read: '读取已保存证据的指定范围', artifact_tail: '查看证据末尾', artifact_find: '在证据中查找文本', artifact_export: '保存工作文件和来源记录',
@@ -56,10 +60,11 @@ export function describeTool(name, args = {}) {
     details.push({ label: '脚本', text: `${args.language ?? 'unknown'} · ${String(args.source ?? '').length} 字符` });
     details.push({ label: '代码预览', text: logPreview(args.source, 700, 6) });
   }
-  const fields = ['capabilities', 'preparation_id', 'environment_id', 'inputs', 'outputs', 'pack', 'operation', 'method_id', 'id', 'path', 'asset_id', 'asset_ids', 'parent_asset_ids', 'script_id', 'session_id', 'section', 'offset', 'length', 'encoding', 'query', 'literal', 'collect_seconds', 'selector', 'candidate_id', 'subtask', 'host', 'port', 'method', 'crop', 'parameters', 'positions', 'retry_reason'];
+  const fields = ['capabilities', 'preparation_id', 'environment_id', 'inputs', 'outputs', 'pack', 'operation', 'method_id', 'id', 'path', 'asset_id', 'asset_ids', 'parent_asset_ids', 'script_id', 'session_id', 'section', 'offset', 'length', 'encoding', 'query', 'literal', 'collect_seconds', 'selector', 'candidate_id', 'subtask', 'host', 'port', 'method', 'crop', 'parameters', 'positions', 'retry_reason', 'target_id', 'connection_id', 'channel_id', 'browser_id', 'action'];
   const values = fields.filter(key => args[key] !== undefined).map(key => `${key}=${typeof args[key] === 'object' ? JSON.stringify(args[key]) : args[key]}`);
   if (values.length) details.push({ label: '参数', text: logPreview(values.join(' · '), 850, 3) });
   for (const key of ['purpose', 'statement', 'goal', 'expected_observation', 'next_action', 'transformation']) if (args[key]) details.push({ label: ({ purpose: '实验目的', statement: '假设', goal: '目标', expected_observation: '预期现象', next_action: '下一步', transformation: '转换说明' })[key], text: logPreview(args[key], 350, 2) });
+  if (args.url) { try { const url = new URL(args.url); for (const key of [...url.searchParams.keys()]) url.searchParams.set(key, '[已隐藏]'); details.push({ label: '网页', text: logPreview(url.href) }); } catch {} }
   if (args.data_base64) details.push({ label: '发送', text: `${Math.floor(String(args.data_base64).length * 3 / 4) - (String(args.data_base64).match(/=*$/)?.[0].length ?? 0)} 字节（不展开二进制数据）` });
   return { purpose, details };
 }
@@ -82,6 +87,11 @@ function summarizePayload(name, reply, isError = false) {
   if (isError && !p.status && !p.state) status = '执行失败';
   if (p.exit_code !== undefined && p.exit_code !== null) add('退出码', p.exit_code);
   if (p.passed !== undefined) add('局部检查', p.passed ? '关系成立（不代表平台接受）' : '关系未成立');
+  if (p.status && typeof p.status === 'number') add('HTTP 状态', p.status);
+  if (p.scope_blocked) add('目标未授权', p.scope_blocked);
+  if (p.preview) add('内容预览', p.preview);
+  if (p.reason) add('连接说明', p.reason);
+  if (p.body_asset_id || p.dom_asset_id || p.asset_id) add('保存内容', p.body_asset_id ?? p.dom_asset_id ?? p.asset_id);
   if (p.session_id) add('进程', `${p.session_id}${p.elapsed_ms !== undefined ? ` · 已运行 ${(p.elapsed_ms / 1000).toFixed(1)}s` : ''}${p.idle_ms !== undefined ? ` · 无输出 ${(p.idle_ms / 1000).toFixed(1)}s` : ''}`);
   if (p.script_id || name === 'script_save') add('脚本', `${p.script_id ?? p.id ?? ''}${p.path ? ' · ' + p.path : ''}`);
   if (p.width && p.height) add('图像', `${p.width} × ${p.height} 像素`);
@@ -181,6 +191,11 @@ export class ToolActivity {
   start(event) {
     const activity = { index: ++this.index, name: plain(event.toolName), started: this.now(), status: '执行中', ...describeTool(event.toolName, event.args), result: [] };
     this.calls.set(event.toolCallId ?? event.toolName, activity);
+    return activity;
+  }
+  update(event) {
+    const activity = this.calls.get(event.toolCallId ?? event.toolName);
+    if (activity) activity.result = [{ label: '进度', text: logPreview(event.partialResult?.content?.filter(b => b.type === 'text').map(b => b.text).join('\n') || '处理中') }];
     return activity;
   }
   finish(event) {

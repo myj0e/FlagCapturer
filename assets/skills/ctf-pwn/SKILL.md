@@ -39,3 +39,7 @@ Use `skill_read` to read the references below only when relevant. The guide is a
 - [kernel-techniques.md](../../vendor/ctf-pwn/kernel-techniques.md): Kernel exploitation techniques: tty_struct kROP (fake vtable + stack pivot), AAW via ioctl register control, userfaultfd race stabilization, SLUB allocator internals (freelist hardening/obfuscation), leak via kernel panic, MADV_DONTNEED race window extension (DiceCTF 2026), cross-cache CPU-split attack (DiceCTF 2026), PTE overlap file write (DiceCTF 2026), addr_limit bypass via failed file open for kernel memory read/write
 - [kernel-bypass.md](../../vendor/ctf-pwn/kernel-bypass.md): Kernel protection bypass: KASLR/FGKASLR bypass (__ksymtab), KPTI bypass (swapgs trampoline, signal handler, modprobe_path/core_pattern via ROP), SMEP/SMAP bypass, GDB kernel module debugging, initramfs/virtio-9p workflow, exploit templates, exploit delivery
 - [field-notes.md](../../vendor/ctf-pwn/field-notes.md): Detailed pwn notes: heap exploitation quick reference, additional exploit notes, useful commands
+
+## 本项目远端工具
+
+先读取 `network_status`。菜单/泄漏/payload 在同一 `remote_open` 连接中用 remote_read/remote_send，base64 为精确字节，文本只作预览。复杂交互用 `network_relay(target_id)` 的 TARGET_HOST/TARGET_PORT 配置现有 pwntools 脚本，不在宿主执行代码。SSH 使用 credential_ref、ssh_exec/ssh_shell 和 ssh_read/send；需要 pwntools 管道时用 ssh_relay 独占 channel，不向模型或脚本泄露密钥。远端二跳无额外强制限制。Resume 复用有效脚本和路线，重新获取当前 ASLR/fd/菜单，出现差异调整最近检查点，避免照搬旧地址或盲目重放整条利用链。

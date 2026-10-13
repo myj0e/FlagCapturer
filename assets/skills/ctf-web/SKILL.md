@@ -43,3 +43,7 @@ Use `skill_read` to read the references below only when relevant. The guide is a
 - [field-notes.md](../../vendor/ctf-web/field-notes.md): Long-form exploit notes: quick references for SQLi, XSS, LFI, JWT, SSTI, SSRF, command injection, XXE, deserialization, race conditions, auth bypass, and multi-stage chains
 - [python-requests.md](../../vendor/ctf-web/python-requests.md): Python requests toolkit: session scaffold, Burp-Intruder-like fuzzer (sync + ThreadPoolExecutor + httpx async), payload deploy from pat-reference.md wordlists, header/param spray, cookie/JWT, proxy
 - [pat-reference.md](../../vendor/ctf-web/pat-reference.md): — PayloadsAllTheThings index: bulk payloads for XSS/SQLi/SSRF/SSTI/LFI/Command Injection/Upload (requires PAT clone, see Prerequisites)
+
+## 本项目远端工具
+
+先读取 `network_status`；新增目标用 `network_request` 请求用户批准，不反复申请已获批范围。使用 `http_session` + `web_request` 保持登录、提交表单、上传和保存响应；正文资产可 materialize 后分析。需要 JS/DOM 时使用 `browser_open` / `browser_action`，页面内 evaluate 不在宿主执行。HTTP 与浏览器用 `web_cookie_sync` 显式同步 Cookie；下载走 web_request。用 network_status 的 blocked_requests 区分缺少授权与应用响应。非标准 HTTP 使用 TCP relay 和沙箱脚本。Resume 按历史有效步骤重验当前登录/实例状态，重建进度。

@@ -48,6 +48,7 @@ export function solvingSummary(state) {
   add('文件与中间结果', files.map(file => `${file.name} · ${fileSize(file.bytes)}${file.parents?.length ? '\n来自：' + file.parents.join('、') : '\n' + file.kind}`), '尚未保存中间文件');
   if (p.file_counts?.derived > files.length) add('更多文件', `已保存 ${p.file_counts.derived} 个结果，以上展示最近 ${files.length} 个`);
   if (completion) add('运行结果', [statuses[completion.outcome] ?? completion.outcome, completion.summary, ...values(completion.unresolved), '/writeup 阅读解题报告']);
+  if (state.networkTargets?.length) add('远端连接范围', state.networkTargets.slice(-8).map(t => `${t.host}:${t.port} · ${t.state === 'active' ? '已授权' : t.state} · ${t.capabilities.join('/')}\n到期：${t.expires_at}`));
   add('运行信息', [`附件授权：${state.consent ? '已授权' : '未授权'}`, `思考强度：${state.thinking ?? 'off'}`, state.busy ? '/stop 停止本次运行' : '/run 开始解题']);
   let updated = '';
   const displayTime = summary?.generated_time ?? summary?.time;

@@ -66,6 +66,9 @@ export function terminalObserver(output = process.stdout, { showThinking = false
     } else if (event.type === 'tool_execution_start') {
       finishThinking();
       block(toolCardText(tools.start(event)));
+    } else if (event.type === 'tool_execution_update') {
+      const activity = tools.update(event);
+      if (activity) block(toolCardText(activity, { resultOnly: true }));
     } else if (event.type === 'tool_execution_end') {
       block(toolCardText(tools.finish(event), { resultOnly: true }));
     } else if (event.type === 'run_finished') {

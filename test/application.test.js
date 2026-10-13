@@ -6,6 +6,8 @@ import { fixture, IMAGE } from './helpers.js';
 import { solve } from '../src/application/solve.js';
 import { readEvents, audit } from '../src/evidence/store.js';
 import { report } from '../src/application/report.js';
+import { importRemote } from '../src/challenge/workspace.js';
+import { RelayGateway } from '../src/runtime/relay.js';
 function dependencies({
   complete = true,
   cleanupFails = false,
@@ -67,6 +69,50 @@ function dependencies({
     })
   };
 }
+test('remote connection hints reach the agent without authorizing manifest targets or exposing query secrets', async t => {
+  const { root } = await fixture(t);
+  const workspace = await importRemote('https://challenge.test/challenge/login?token=SECRET#PRIVATE', join(root, 'imports'), {
+    task: '分析登录页面并获取 Flag', authorized: true, basis: 'fixture'
+  });
+  const deps = dependencies();
+  const prepare = deps.preparePi; let received;
+  deps.preparePi = async (...args) => {
+    const prepared = await prepare(...args), create = prepared.create;
+    prepared.create = async config => {
+      const agent = await create(config), prompt = agent.prompt;
+      agent.prompt = async text => {
+        received = text;
+        const status = JSON.parse((await config.registry.invoke('network_status', {})).content[0].text);
+        assert.deepEqual(status.targets, []);
+        await prompt(text);
+      };
+      return agent;
+    };
+    return prepared;
+  };
+  const result = await solve({ workspace: workspace.root, runsRoot: join(root, 'runs'), confirmModelUsage: true }, deps);
+  assert.equal(result.status, 'completed');
+  assert.match(received, /\/challenge\/login/);
+  assert.match(received, /Remote connection hints/);
+  assert.doesNotMatch(received, /SECRET|PRIVATE/);
+});
+test('explicit network authorization uses imported endpoints and explicit targets replace their scope', async t => {
+  // This contract checks scope selection, not a live socket or remote connection.
+  t.mock.method(RelayGateway.prototype, 'start', async () => {});
+  const { root } = await fixture(t);
+  const workspace = await importRemote('nc 127.0.0.1 31337', join(root, 'imports'), { authorized: true, basis: 'fixture' });
+  for (const targets of [undefined, ['tcp://127.0.0.1:31338']]) {
+    let grants;
+    const result = await solve({
+      workspace: workspace.root, runsRoot: join(root, 'runs'), confirmModelUsage: true,
+      authorizeNetwork: true, targets, onReady: controls => { grants = controls.network(); }
+    }, dependencies());
+    assert.equal(result.status, 'completed', result.error);
+    assert.equal(grants.length, 1);
+    assert.equal(grants[0].port, targets ? 31338 : 31337);
+    assert.deepEqual(grants[0].capabilities, ['tcp']);
+  }
+});
 test('application saves writeup, evidence and metrics and closes runtime on successful solve', async t => {
   const {
       root,

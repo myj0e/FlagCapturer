@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { visibleWidth, TuiAltScreen, getKeybindings } from '@earendil-works/pi-tui';
 import { WorkbenchView, clean } from '../src/ui/workbench-view.js';
 import { Workbench, startWorkbench } from '../src/ui/workbench.js';
+import { fixture } from './helpers.js';
+import { join } from 'node:path';
 function view() {
   const terminal = {
     columns: 120,
@@ -46,6 +48,31 @@ function models() {
     save: async () => {}
   };
 }
+test('/target accepts socat and natural language, previews extracted scopes and keeps query secrets out of UI', async t => {
+  const { root } = await fixture(t), { view: v } = view();
+  const confirmations = [];
+  v.ask = async () => '获取 Flag';
+  v.choose = async (title, choices, options) => { confirmations.push({ title, detail: options.detail }); return 'yes'; };
+  const runs = [];
+  const app = new Workbench({ view: v, catalog: models(), options: { importsRoot: join(root, 'imports') }, solveRun: async options => {
+    runs.push(options); return { status: 'cancelled', run_dir: '/synthetic/run' };
+  } });
+  await app.openRemote('socat STDIO,raw,echo=0,opost,onlcr TCP:pwnable.kr:10001');
+  assert.deepEqual(app.options.targets, ['tcp://pwnable.kr:10001']);
+  assert.match(confirmations[0].detail, /raw,echo=0,opost,onlcr/);
+  await app.run(); await app.active;
+  assert.deepEqual(runs[0].targets, ['tcp://pwnable.kr:10001']);
+  assert.equal(runs[0].authorizeNetwork, true);
+  assert.match(confirmations[1].detail, /允许连接目标服务：tcp:\/\/pwnable.kr:10001/);
+  await app.openRemote('先访问 https://web.test/login?token=SECRET#PRIVATE，再通过 TCP 连接 pwn.test 的 31337 端口，保持连接');
+  assert.equal(app.options.targets.length, 2);
+  assert.doesNotMatch(JSON.stringify(confirmations) + JSON.stringify(v.entries), /SECRET|PRIVATE/);
+  await app.openRemote('先登录题目服务器，地址稍后提供');
+  assert.deepEqual(app.options.targets, []);
+  await app.run(); await app.active;
+  assert.equal(runs[1].authorizeNetwork, false);
+  assert.match(confirmations.at(-1).detail, /尚无初始网络授权/);
+});
 test('workbench renders responsive Chinese frames and never displays secret prompt values', async () => {
   const data = view();
   data.view.log('Agent', '中文进展\n\x1b]52;c;EVIL\x07正常文本');

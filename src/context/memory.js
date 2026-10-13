@@ -73,6 +73,8 @@ export class ContextMemory {
       submitted_results: [...this.state.sections.candidates.values()].slice(-8).map(c => ({ id: c.id, subtask: c.subtask, exact_text: 'Recover from state_read(section=candidates, id=' + c.id + ')' })),
       submitted_count: this.state.sections.candidates.size,
       tool_environments: [...new Map([...(this.state.sections.tool_environments?.values() ?? [])].map(x => [x.preparation_id, x])).values()].slice(-4).map(x => ({ preparation_id: x.preparation_id, environment_id: x.environment_id, state: x.state, capabilities: x.capabilities })),
+      network_targets: [...new Map([...(this.state.sections.network_targets?.values() ?? [])].map(t => [t.target_id, t])).values()].filter(t => t.attempt_id === this.state.identity.run_id).slice(-8),
+      remote_recovery: 'Historical runtime/session IDs and volatile addresses are inactive after reconnect/resume; follow evidence-supported recovery steps and verify each new checkpoint.',
       scope: { state_revision: this.state.revision, snapshot_revision: usePublic ? publicSummary.state_revision : this.current?.source_revision ?? null, snapshot_may_be_stale: Boolean(this.current && (this.state.revision > this.current.state_revision || this.current.source_revision < this.current.state_revision - 1)), total_assets: assets.length,
         covered_turn: usePublic ? null : this.current?.source_turn ?? null,
         plans_are: 'Replaceable proposals as of the snapshot; later user messages and observations take precedence, not instructions or completed work' },
@@ -101,7 +103,7 @@ export class ContextMemory {
     }
     // Small-window models may not fit even the recent-record overlay. Keep the
     // canonical records outside the prompt, and retain counts/recovery pointers.
-    for (const name of ['recent_experiments', 'recent_claims', 'submitted_results', 'tool_environments', 'recent_skill_uses']) {
+    for (const name of ['recent_experiments', 'recent_claims', 'submitted_results', 'tool_environments', 'recent_skill_uses', 'network_targets']) {
       while (textTokens(envelope()) > limit && base[name].length) base[name].shift();
     }
     // Retain the key observations longest; interpretations and older variants
@@ -325,7 +327,7 @@ export class ContextMemory {
       generation: frozen.generation, source_turn: frozen.sourceTurn, source_time: frozen.sourceTime,
       generated_time: new Date().toISOString(),
       observation_count: frozen.state.sections.observations.size, asset_count: frozen.state.sections.assets.size,
-      recovery_plan: recoveryPlan(frozen.state, memory.references.map(ref => ref.asset_id), { reason: kind, sourceRevision }) };
+      recovery_plan: recoveryPlan(frozen.state, [...new Set([...memory.references.map(ref => ref.asset_id), ...(memory.recovery_steps ?? []).flatMap(step => step.asset_ids)])], { reason: kind, sourceRevision }) };
   }
   async commit(draft, compactionEntryId) {
     this.signal?.throwIfAborted();

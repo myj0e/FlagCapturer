@@ -6,7 +6,7 @@ export class RunState {
     this.revision = 0;
     this.completion = null;
     this.recordQueue = Promise.resolve();
-    this.sections = Object.fromEntries(['observations', 'candidates', 'checks', 'claims', 'experiments', 'summaries', 'scripts', 'checkpoints', 'sources', 'assets', 'context_snapshots', 'tool_environments', 'executions', 'asset_locations', 'recovery_plans', 'skill_catalogs', 'skill_uses', 'route_reviews'].map(name => [name, new Map()]));
+    this.sections = Object.fromEntries(['observations', 'candidates', 'checks', 'claims', 'experiments', 'summaries', 'scripts', 'checkpoints', 'sources', 'assets', 'context_snapshots', 'tool_environments', 'executions', 'asset_locations', 'recovery_plans', 'skill_catalogs', 'skill_uses', 'route_reviews', 'network_targets', 'remote_sessions'].map(name => [name, new Map()]));
   }
   async restore(events, source) {
     invariant(this.revision === 0, 'State must be empty before restore');

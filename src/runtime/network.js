@@ -25,10 +25,13 @@ const grantSchema = s.object({
 export async function loadGrant(path, workspace, now = Date.now()) {
   const bytes = await readRegular(path, 65536);
   const grant = JSON.parse(bytes.toString());
-  validate(grant, grantSchema);
+  if (grant.schema_version === 2) {
+    validate(grant, s.object({ ...grantSchema.properties, schema_version: s.int(2, 2), targets: s.array(s.object({ host: s.text(253), port: s.int(1, 65535), capabilities: s.array(s.enum(['http', 'browser', 'tcp', 'ssh']), 4), ssh_host_key: s.text(200) }, ['host', 'port', 'capabilities']), 32) }, ['schema_version', 'challenge_id', 'task_sha256', 'input_sha256', 'basis', 'expires_at', 'targets']));
+  } else validate(grant, grantSchema);
   invariant(grant.basis.trim() && grant.challenge_id === workspace.manifest.id && grant.task_sha256 === workspace.manifest.task_sha256, 'Grant is not bound to this challenge');
   invariant(JSON.stringify([...grant.input_sha256].sort()) === JSON.stringify(workspace.manifest.files.map(x => x.sha256).sort()), 'Grant input hashes mismatch');
   invariant(Number.isFinite(Date.parse(grant.expires_at)) && Date.parse(grant.expires_at) > now, 'Network grant expired');
+  if (grant.schema_version === 2) return { ...grant, targets: grant.targets.map(target => ({ ...target, expires_at: grant.expires_at })), grant_sha256: sha256(bytes) };
   if (grant.kind === 'tcp') invariant(isIP(grant.ip) !== 0 && !grant.service, 'Remote grant requires a literal IP; no DNS');else {
     invariant(grant.service && !grant.ip, 'Local service grant requires service image/argv only');
     imageReference(grant.service.image);

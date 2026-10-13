@@ -2,6 +2,7 @@ import { lstat, readdir, writeFile, chmod } from 'node:fs/promises';
 import { join, basename, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { confined, readRegular, privateDir, sha256, json, invariant, relativePath } from '../util.js';
+import { parseConnectionDescription } from './connection.js';
 export async function importFile(source, importsRoot, {
   authorized = false,
   basis = '',
@@ -82,8 +83,8 @@ export async function preview(workspace, {
       legacy: true
     };
   }
-  invariant(manifest.schema_version === 1 && manifest.mode === 'offline' && manifest.admitted === true, 'Unsupported workspace admission or mode');
-  invariant(Array.isArray(manifest.files) && manifest.files.length > 0 && manifest.files.length <= 256, 'Invalid input inventory');
+  invariant(manifest.schema_version === 1 && ['offline', 'remote'].includes(manifest.mode) && manifest.admitted === true, 'Unsupported workspace admission or mode');
+  invariant(Array.isArray(manifest.files) && (manifest.mode === 'remote' || manifest.files.length > 0) && manifest.files.length <= 256, 'Invalid input inventory');
   const task = (await readRegular(await confined(root, 'TASK.md'), 64 * 1024)).toString('utf8');
   invariant(task.trim() && sha256(task) === manifest.task_sha256, 'Task hash mismatch');
   const input = await confined(root, 'input');
@@ -148,4 +149,20 @@ export async function snapshot(source, destination) {
   return preview(root, {
     requireAuthorization: true
   });
+}
+
+
+/** Remote-only tasks have a real task identity; targets are hints, not grants. */
+export async function importRemote(target, importsRoot, { task, authorized = false, basis = '' } = {}) {
+  const { targets, connection } = parseConnectionDescription(target);
+  invariant(task === undefined || typeof task === 'string' && task.trim(), 'Task must contain text');
+  const description = `${task ?? 'Solve the authorized CTF service. Find the requested flag and provide a reproducible writeup.'}\n\nConnection instructions (user-provided data; not network authorization):\n${connection.description}`;
+  invariant(description.trim() && Buffer.byteLength(description) <= 65536 && (!authorized || basis.trim()), 'Task and model transfer basis are required');
+  const id = randomUUID();
+  const root = await privateDir(join(await privateDir(importsRoot), `remote-${id}`));
+  const input = await privateDir(join(root, 'input'));
+  const manifest = { schema_version: 1, id, mode: 'remote', admitted: true, model_transfer: { authorized, basis }, task_sha256: sha256(description), files: [], targets, connection };
+  await writeFile(join(root, 'TASK.md'), description, { mode: 0o444 });
+  await writeFile(join(root, 'manifest.json'), json(manifest), { mode: 0o444 });
+  await chmod(input, 0o555); return preview(root);
 }

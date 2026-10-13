@@ -8,7 +8,10 @@ export const recipes = {
   forensics: { title: '取证', aliases: ['volatility3', 'tshark', 'sleuthkit'], binaries: ['vol', 'tshark', 'fls'], modules: ['volatility3'] },
   blockchain: { title: 'Foundry / Web3', aliases: ['forge', 'cast', 'anvil', 'solc', 'web3'], binaries: ['forge', 'cast', 'anvil', 'solc'], modules: ['web3'], verify: 'from web3 import Web3; assert Web3.to_int(hexstr="0x2a")==42' },
   signal: { title: '音频 / 信号', aliases: ['audacity', 'pulseview', 'sigrok', 'gnuradio'], binaries: ['audacity', 'pulseview', 'sigrok-cli', 'gnuradio-companion'], modules: [] },
-  web: { title: 'Web / gRPC / CyberChef', aliases: ['grpcurl', 'chromium', 'firefox', 'burp', 'cyberchef'], binaries: ['grpcurl', 'chromium', 'firefox-esr', 'burpsuite', 'cyberchef'], modules: [] },
+  web: { title: 'Web / gRPC / CyberChef', aliases: ['grpcurl', 'firefox', 'burp', 'cyberchef'], binaries: ['grpcurl', 'chromium', 'firefox-esr', 'burpsuite', 'cyberchef'], modules: [] },
+  browser: { title: 'Chromium 网页分析', aliases: ['chromium', 'cdp'], binaries: ['chromium'], modules: [], verify: 'import shutil; assert shutil.which("chromium")' },
+  ssh: { title: 'SSH 远端连接', aliases: ['paramiko'], binaries: [], modules: ['paramiko'] },
+  pwn: { title: 'Pwn 利用与调试', aliases: ['pwntools'], binaries: ['gdb'], modules: ['pwn'] },
   construct: { title: 'Construct 二进制结构', binaries: [], modules: ['construct'], wheels: ['construct'], verify: 'import construct; assert construct.Int16ul.parse(b"\\x2a\\x00")==42' },
   dpkt: { title: 'dpkt 网络包解析', binaries: [], modules: ['dpkt'], wheels: ['dpkt'], verify: 'import dpkt; assert dpkt.ip.IP(bytes(dpkt.ip.IP(src=b"\\x7f\\x00\\x00\\x01"))).src==b"\\x7f\\x00\\x00\\x01"' },
   pefile: { title: 'PE 文件解析', binaries: [], modules: ['pefile'], wheels: ['pefile'], verify: 'import pefile; assert pefile.MACHINE_TYPE[0x14c]=="IMAGE_FILE_MACHINE_I386"' }

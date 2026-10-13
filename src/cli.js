@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
-import { importFile, preview } from './challenge/workspace.js';
+import { importFile, importRemote, preview } from './challenge/workspace.js';
 import { solve } from './application/solve.js';
 import { report, diagnose, evaluate, replay } from './application/report.js';
 import { recover } from './application/recovery.js';
@@ -15,6 +15,7 @@ import { startWorkbench } from './ui/workbench.js';
 const HELP = `FlagCapturer 0.2 — Pi-based CTF workbench (Node >=22.19)
 
 ctfbot import <file|folder> [--authorize-model-data --basis <reason>] [--task <text>]
+ctfbot remote <URL|connection-description> [--task <text>] --authorize-model-data --basis <reason>
 ctfbot preview <workspace>
 ctfbot solve <workspace> --provider <provider> --model <id> --confirm-model-usage [--interactive]
 ctfbot resume <run-directory> --confirm-model-usage [--provider <provider> --model <id>]
@@ -27,7 +28,8 @@ ctfbot doctor | --help | --version
 Options: --image (default ctfbot-tools:candidate), --runs-root, --imports-root,
          --skill <name>, --skill-path <directory> (repeatable),
          --additional-prompt, --thinking, --show-thinking (CLI reasoning text), --json, --output (evaluation results)
-         --network-grant (scoped TCP/service grant), --memory (reviewed snapshot)
+         --target <URL> (repeatable) --authorize-network, --remote-credentials <private JSON>,
+         --network-grant (task-bound targets/TCP/service grant), --memory (reviewed snapshot)
 No arguments opens the interactive workbench. /login, /model, /thinking configure Pi.
 `;
 async function doctor() {
@@ -163,6 +165,9 @@ async function main() {
       output: {
         type: 'string'
       },
+      target: { type: 'string', multiple: true },
+      'authorize-network': { type: 'boolean' },
+      'remote-credentials': { type: 'string' },
       'network-grant': {
         type: 'string'
       },
@@ -195,6 +200,9 @@ async function main() {
     showThinking: values['show-thinking'],
     json: values.json,
     output: values.output,
+    targets: values.target ?? [],
+    authorizeNetwork: values['authorize-network'] === true,
+    remoteCredentials: values['remote-credentials'],
     networkGrant: values['network-grant'],
     memoryPath: values.memory
   };
@@ -212,6 +220,9 @@ async function main() {
         skillPaths: values['skill-path'] ?? [],
         runsRoot: values['runs-root'],
         importsRoot: values['imports-root'],
+        targets: values.target,
+        authorizeNetwork: values['authorize-network'] === true,
+        remoteCredentials: values['remote-credentials'],
         networkGrant: values['network-grant'],
         memoryPath: values.memory
       }).filter(([, value]) => value !== undefined)));
@@ -226,6 +237,10 @@ async function main() {
         basis: values.basis ?? '',
         task: values.task
       });
+      break;
+    case 'remote':
+      invariant(path, 'Specify a target URL or connection description');
+      result = await importRemote(path, values['imports-root'] ?? 'data/imports', { task: values.task, authorized: values['authorize-model-data'] === true, basis: values.basis ?? '' });
       break;
     case 'preview':
       invariant(path, 'Specify a workspace');

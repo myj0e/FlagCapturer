@@ -62,7 +62,7 @@ export function recoveryPlan(state, assetIds, { reason = 'context_summary', sour
 export function recoveryGoals(state) {
   const snapshot = [...state.sections.context_snapshots.values()].at(-1);
   // Include work produced after the last summary, including a stop before the next ten-turn refresh.
-  const selected = snapshot?.memory.references.map(ref => ref.asset_id) ?? [];
+  const selected = [...(snapshot?.memory.references.map(ref => ref.asset_id) ?? []), ...(snapshot?.memory.recovery_steps ?? []).flatMap(step => step.asset_ids)];
   const assets = [...state.sections.assets.values()];
   const recent = !snapshot ? assets : Number.isInteger(snapshot.asset_count) ? assets.slice(snapshot.asset_count)
     : assets.filter(asset => asset.time >= snapshot.time); // Conservative compatibility with older snapshots.
