@@ -99,7 +99,7 @@ def run_in_thread(service, workspace: Path, root: Path, control: RunControl, eve
     def target() -> None:
         try:
             outcome["result"] = service.run(
-                workspace, IMAGE, root / "runs", RunLimits(max_turns=1, max_tool_calls=2),
+                workspace, IMAGE, root / "runs", RunLimits(),
                 control=control,
                 event_sink=event_sink,
             )
@@ -203,12 +203,12 @@ def test_stop_interrupts_blocked_command_and_preserves_cleanup(tmp_path: Path) -
 def test_candidate_result_records_unverified_metadata_and_redacts_report(tmp_path: Path) -> None:
     workspace = make_workspace(tmp_path)
     control = RunControl()
-    model = FakeModelSession((ScriptedTurn(tool_calls=(ToolCall("candidate_submit", {"candidate": CANDIDATE}), ToolCall("run_complete", {"outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Retain candidate", "unresolved": ["competition confirmation"]}),)),))
+    model = FakeModelSession((ScriptedTurn(tool_calls=(ToolCall("candidate_submit", {"candidate": CANDIDATE}), ToolCall("run_complete", {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', "outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Retain candidate", "unresolved": []}),)),))
     events: list[dict] = []
     service = make_service(lambda: model, lambda root, image: QuietRuntime(root, image))
 
     result = service.run(
-        workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1),
+        workspace, IMAGE, tmp_path / "runs", RunLimits(),
         control=control,
         event_sink=events.append,
     )
@@ -221,7 +221,7 @@ def test_candidate_result_records_unverified_metadata_and_redacts_report(tmp_pat
     )
     assert result.status == "candidate_unverified"
     assert candidate_result["result"]["status"] == "unverified"
-    assert candidate_result["result"]["verification_method"] == "none"
+    assert candidate_result["result"]["verification_method"] == "not_required"
     assert "stage-b-report" in report
     assert "input.txt" in report
     assert "limits" in report
@@ -256,7 +256,7 @@ def test_runtime_startup_error_returns_reportable_error_and_closes_resources(tmp
     runtime = BrokenRuntime(workspace / "input", IMAGE)
     service = make_service(lambda: model, lambda *_: runtime)
 
-    result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
+    result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits())
 
     assert result.status == "error"
     assert result.stop_reason == "runtime_or_controller_error"
@@ -276,7 +276,7 @@ def test_model_initialization_failure_has_a_durable_run_record(tmp_path: Path) -
         raise RuntimeError("synthetic provider startup failure")
 
     service = make_service(broken_model, lambda *_: pytest.fail("runtime must not start"))
-    result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
+    result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits())
 
     state_path = Path(result.run_dir) / "run-state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
@@ -312,7 +312,7 @@ def test_provider_timeout_is_a_terminal_timed_out_lifecycle(tmp_path: Path) -> N
 
     model = TimeoutModel()
     service = make_service(lambda: model, lambda root, image: QuietRuntime(root, image))
-    result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
+    result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits())
 
     state = json.loads((Path(result.run_dir) / "run-state.json").read_text(encoding="utf-8"))
     events = [json.loads(line) for line in (Path(result.run_dir) / "events.jsonl").read_text().splitlines()]
@@ -331,12 +331,12 @@ def test_provider_cleanup_error_is_visible_in_run_state(tmp_path: Path) -> None:
         def close(self) -> None:
             raise RuntimeError("synthetic provider cleanup failure")
 
-    service = make_service(lambda: CloseFailureModel(()), lambda root, image: QuietRuntime(root, image))
-    result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
+    service = make_service(lambda: CloseFailureModel((ScriptedTurn(tool_calls=(ToolCall("run_complete", {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', "outcome":"unsolved", "summary":"done", "unresolved":[]}),)),)), lambda root, image: QuietRuntime(root, image))
+    result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits())
 
     state = json.loads((Path(result.run_dir) / "run-state.json").read_text(encoding="utf-8"))
     events = [json.loads(line) for line in (Path(result.run_dir) / "events.jsonl").read_text().splitlines()]
-    assert result.status == "unverified"
+    assert result.status == "unsolved"
     assert result.cleanup_errors == ("RuntimeError",)
     assert state["state"] == "completed"
     assert state["cleanup_status"] == "error"
@@ -389,7 +389,7 @@ def test_report_marks_and_skips_an_incomplete_trailing_event(tmp_path: Path) -> 
     workspace = make_workspace(tmp_path)
     model = FakeModelSession(())
     service = make_service(lambda: model, lambda root, image: QuietRuntime(root, image))
-    result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
+    result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits())
     with (Path(result.run_dir) / "events.jsonl").open("ab") as stream:
         stream.write(b'{"seq":')
 
@@ -451,7 +451,7 @@ def test_interactive_session_round_trip_persists_transcript_and_closes(tmp_path:
             self.observed_output = json.loads(read.content)["output"]
             on_tool_call(ToolCall("session_close", {"session_id": session_id}))
             on_tool_call(ToolCall("candidate_submit", {"candidate": CANDIDATE}))
-            on_tool_call(ToolCall("run_complete", {"outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Retain candidate", "unresolved": []}))
+            on_tool_call(ToolCall("run_complete", {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', "outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Retain candidate", "unresolved": []}))
             return TurnResult(text="", tool_calls=4)
 
         def close(self) -> None:
@@ -462,7 +462,7 @@ def test_interactive_session_round_trip_persists_transcript_and_closes(tmp_path:
     service = make_service(lambda: model, lambda *_: runtime)
     result = service.run(
         workspace, IMAGE, tmp_path / "runs",
-        RunLimits(max_turns=3, max_tool_calls=8),
+        RunLimits(),
     )
 
     assert result.status == "candidate_unverified"
@@ -507,7 +507,7 @@ def test_interactive_session_idle_timeout_terminates_the_process() -> None:
     )
 
     first_read = session.read(timeout=1, maximum_bytes=128)
-    timed_out_read = session.read(timeout=1, maximum_bytes=128)
+    timed_out_read = session.read(timeout=3, maximum_bytes=128)
     session.close()
 
     assert b"ready" in first_read.data
@@ -678,7 +678,7 @@ def test_stop_during_interactive_read_closes_session_and_keeps_transcript(tmp_pa
         try:
             outcome["result"] = service.run(
                 workspace, IMAGE, tmp_path / "runs",
-                RunLimits(max_turns=2, max_tool_calls=4),
+                RunLimits(),
                 control=control,
             )
         except BaseException as exc:
@@ -706,7 +706,7 @@ def test_stop_during_interactive_read_closes_session_and_keeps_transcript(tmp_pa
 def test_teardown_failure_after_completion_keeps_one_terminal_result(tmp_path: Path) -> None:
     workspace = make_workspace(tmp_path)
     control = RunControl()
-    model = FakeModelSession((ScriptedTurn(tool_calls=(ToolCall("candidate_submit", {"candidate": CANDIDATE}), ToolCall("run_complete", {"outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Retain candidate", "unresolved": []}),)),))
+    model = FakeModelSession((ScriptedTurn(tool_calls=(ToolCall("candidate_submit", {"candidate": CANDIDATE}), ToolCall("run_complete", {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', "outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Retain candidate", "unresolved": []}),)),))
 
     class TeardownFailureRuntime(QuietRuntime):
         def __exit__(self, *_: object) -> None:
@@ -720,7 +720,7 @@ def test_teardown_failure_after_completion_keeps_one_terminal_result(tmp_path: P
     service = make_service(lambda: model, lambda *_: runtime)
 
     result = service.run(
-        workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1), control=control
+        workspace, IMAGE, tmp_path / "runs", RunLimits(), control=control
     )
 
     events = [json.loads(line) for line in (Path(result.run_dir) / "events.jsonl").read_text().splitlines()]

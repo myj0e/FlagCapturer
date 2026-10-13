@@ -12,7 +12,8 @@ from rich.text import Text
 from ctfbot.tui.safe_text import safe_plain_text
 
 
-IGNORED_EVENTS = {"run_metadata", "command_execution", "workflow_read", "domain_routing",
+IGNORED_EVENTS = {"context_compaction_started", "context_compaction_completed", "context_compaction_unavailable", "provider_initialized", "provider_context_usage", "provider_compaction_started", "provider_compaction_completed",
+                 "context_restore_delivered", "run_metadata", "command_execution", "workflow_read", "domain_routing",
                  "run_state_changed", "observation_recorded", "candidate_recorded",
                  "candidate_check_recorded", "experiment_recorded", "claim_recorded",
                  "model_turn_started", "summary_updated", "context_index_updated", "context_snapshot"}
@@ -113,8 +114,6 @@ def _reply_summary(raw: str | None, name: str) -> str:
         names = list(packs) if isinstance(packs, dict) else packs if isinstance(packs, list) else []
         return f"可用工作流：{', '.join(map(str, names))}；题型线索：{', '.join(map(str, labels))}"
     fields = []
-    if value.get("output_warning") == "ordinary_pool_80_percent":
-        fields.append("工具回复额度已使用 80%，后续返回缩短；状态与证据仍可读取。")
     for stream, preview in value.get("previews", {}).items():
         if isinstance(preview, dict):
             fields.append(f"{stream} 头部：{preview.get('head', '')}\n{stream} 尾部：{preview.get('tail', '')}")
@@ -137,7 +136,6 @@ def _reply_summary(raw: str | None, name: str) -> str:
 def render_timeline(state: TimelineState) -> Text:
     """Render labeled blocks; meaning remains clear without color support."""
     output = Text()
-    output.append("上下文占用：未知（provider 未提供当前占用计数）\n", style="dim")
     for notice in state.notices:
         if notice.get("event_type") == "run_finished":
             continue
@@ -164,7 +162,11 @@ def render_timeline(state: TimelineState) -> Text:
         if notice.get("event_type") == "run_finished":
             output.append("\n◆ " + _notice_text(notice) + "\n", style="bold yellow")
     if not state.rounds and not state.notices:
-        output.append("等待模型开始本轮……", style="dim")
+        output.append("\n  准备开始解题\n\n", style="bold cyan")
+        output.append("  01  选择附件或已导入的题目目录\n\n", style="dim")
+        output.append("  02  Preview 检查题目、授权与运行环境\n\n", style="dim")
+        output.append("  03  Run 启动，公开说明与工具结果将在此显示\n\n", style="dim")
+        output.append("  F2 切换配置与记录  ·  F3 切换解题摘要", style="dim")
     return output
 
 
@@ -192,21 +194,14 @@ def _append_tool_card(output: Text, entry: dict[str, Any]) -> None:
             output.append("  │ 错误：" + safe_plain_text(str(result["error_kind"])) + "\n", style="bold red")
     if entry.get("candidate") is not None:
         candidate_status = safe_plain_text(str(result.get("status", "unverified")))
-        output.append(f"  ├─ 候选 · {candidate_status} · 正确性未确认\n", style="bold yellow")
+        subtask = safe_plain_text(str(result.get("subtask") or "未标注子题"))
+        output.append(f"  ├─ 候选 · {subtask} · 已提交，子任务完成\n", style="bold yellow")
         output.append("  │ " + safe_plain_text(entry["candidate"]) + "\n", style="yellow")
     output.append("  └────────────────────────────────────────────\n\n", style="dim")
 
 
 def _notice_text(event: dict[str, Any]) -> str:
     kind = event.get("event_type", "event")
-    if kind == "provider_context_usage":
-        return f"上下文占用未知 · provider 窗口容量：{event.get('capacity') or '未知'} tokens；账单用量单独记录"
-    if kind == "provider_compaction_started":
-        return "已观测上下文压缩开始"
-    if kind == "provider_compaction_completed":
-        return "已观测上下文压缩完成 · 运行状态待补发"
-    if kind == "context_restore_delivered":
-        return f"运行状态已补发 · revision {event.get('revision')} · {event.get('channel')}"
     if kind == "run_finished":
         return f"运行结束：{event.get('status', 'unknown')} · {event.get('stop_reason', 'unknown')}"
     if kind == "completion_recorded":
@@ -319,7 +314,8 @@ def compact_event(event: dict[str, Any], read: Callable[[Any], str | None]) -> s
             else:
                 body = json.dumps(without_evidence({key: value for key, value in response.items()
                                    if not key.endswith(("_evidence", "_sha256")) and key not in
-                                   {"evidence", "artifact", "status", "exit_code", "stdout", "stderr", "observation"}}), ensure_ascii=False)
+                                   {"evidence", "artifact", "status", "exit_code", "stdout", "stderr", "observation",
+                                    "provider_context", "provider", "run_budget", "context_restore", "transmission"}}), ensure_ascii=False)
                 if body == "{}":
                     body = "（无文本输出）"
         else:

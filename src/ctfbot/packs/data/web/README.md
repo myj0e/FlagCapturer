@@ -4,7 +4,7 @@ Start with one bounded GET/HEAD through http_request if the remote grant permits
 
 ## Execution and verification
 
-Use workflow_environment before workflow_run. Inputs are read-only paths relative to /challenge; scripts and extracted files go to /work. Inspect artifact hashes and lineage. Submit a candidate using candidate_submit; workflow output alone never marks a solve verified. Output caps, timeouts and missing dependencies must be retained in evidence.
+Use workflow_environment before workflow_run. Inputs are read-only paths relative to /challenge; scripts and extracted files go to /work. Inspect artifact hashes and lineage. Submit the flag using candidate_submit to complete that requested objective. Continue only actual remaining subtasks, then include an agent-authored Markdown writeup in run_complete; platform acceptance is never pending work. Output caps, timeouts and missing dependencies must be retained in evidence.
 
 ## Coverage limits
 

@@ -63,7 +63,14 @@ class AuthoredProvider:
         operation, path = OPERATIONS[category]
         call("workflow_discover")
         call("workflow_read", pack=category)
-        call("workflow_environment", pack=category)
+        environment_result = call("workflow_environment", pack=category)
+        environment = json.loads(environment_result["stdout"])
+        assert environment["tooling_profile"] == "general-v3"
+        expected = {"crypto": {"factor", "veracrypt", "cryptsetup"},
+                    "reverse": {"objdump", "upx", "go"},
+                    "forensics": {"veracrypt", "cryptsetup"}}.get(category, set())
+        assert all(environment["binaries"].get(binary) for binary in expected), environment
+        assert "no mount" in environment["runtime_constraints"]["disk_encryption"]
         call("workflow_run", pack=category, operation=operation, path=path)
         call("script_save", path="solve.py", source=SCRIPTS[category])
         output = call("script_run", path="solve.py", argv=[])
@@ -84,7 +91,7 @@ class AuthoredProvider:
             raise RuntimeError("authored solver produced no candidate")
         recorded = call("candidate_submit", candidate=candidate.group())
         call('run_complete', outcome='candidate_unverified', candidate_id=recorded['candidate_id'],
-             summary='Authored solver produced an unverified candidate', unresolved=['competition confirmation'])
+             summary='Authored solver produced an unverified candidate', unresolved=[], writeup='# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.')
         return TurnResult(text="authored deterministic workflow", tool_calls=count)
 
 
@@ -107,7 +114,7 @@ def verify(image: str, output: Path):
         return runtime
     records = []
     cases = load_dataset(development)["cases"]
-    limits = RunLimits(max_turns=1, max_tool_calls=16, wall_time_seconds=90)
+    limits = RunLimits()
     for case in cases:
         service = LocalChallengeService(model_factory=lambda c=case["category"]: AuthoredProvider(c),
                                         model_metadata={"provider": "authored-deterministic"}, runtime_factory=factory,
@@ -129,8 +136,7 @@ def verify(image: str, output: Path):
                                     model_metadata={"provider": "authored-deterministic"}, runtime_factory=factory,
                                     memory_root=memory,memory_namespaces=('manuals',))
     summary = run_evaluation(dataset_path=holdout, development_reference=development, service=service,
-                             runtime_image=image, output=output / "evaluation", limits=limits,
-                             max_total_turns=6, max_total_tool_calls=96, max_total_wall_seconds=600)
+                             runtime_image=image, output=output / "evaluation", limits=limits,)
     assert json.loads(summary.read_text())["aggregate"]["completed_with_candidate_over_scheduled"] == [6, 6]
     assert not unfinished(output / "runtime-state")
     frozen=MemoryView(memory,namespaces=('manuals',))

@@ -113,19 +113,20 @@ def test_memory_review_namespaces_source_changes_and_revocation(tmp_path):
         review(root, identity, reviewer="unit", basis="check", decision="approve", contamination="generic")
 
 
-def test_dataset_evaluation_budget_metrics_and_replay(dataset, tmp_path):
+def test_dataset_evaluation_runs_all_jobs_and_preserves_metrics_and_replay(dataset, tmp_path):
     loaded = load_dataset(dataset)
     flags = [f"authored-candidate-{i}" for i in range(len(loaded["cases"]))]
     queue = iter(flags)
     service = LocalChallengeService(model_factory=lambda: FakeModelSession([
-        ScriptedTurn(tool_calls=(ToolCall("candidate_submit", {"candidate": next(queue)}), ToolCall("run_complete", {"outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Retain candidate", "unresolved": ["competition confirmation"]}),))]),
+        ScriptedTurn(tool_calls=(ToolCall("candidate_submit", {"candidate": next(queue)}), ToolCall("run_complete", {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', "outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Retain candidate", "unresolved": []}),))]),
         model_metadata={"provider": "unit-only"}, runtime_factory=AuthoredHostRuntime)
     summary = run_evaluation(dataset_path=dataset, service=service, runtime_image=IMAGE, output=tmp_path / "evaluations",
-                             limits=RunLimits(max_turns=1), max_total_turns=2, max_total_tool_calls=10)
+                             limits=RunLimits())
     payload = json.loads(summary.read_text())
-    assert payload["aggregate"]["completed_with_candidate_over_scheduled"] == [2, 6]
-    assert payload["aggregate"]["not_run"] == 4
-    assert payload["remaining_turns"] == 0
+    assert payload["aggregate"]["completed_with_candidate_over_scheduled"] == [6, 6]
+    assert payload["aggregate"]["not_run"] == 0
+    assert payload["conditions"]["automatic_budget_stop"] is False
+    assert "remaining_turns" not in payload
     assert payload["aggregate"]["cost_per_run"] is None
     assert all(flag not in summary.read_text() for flag in flags)
     case = loaded["cases"][0]
@@ -133,7 +134,7 @@ def test_dataset_evaluation_budget_metrics_and_replay(dataset, tmp_path):
     run_service = LocalChallengeService(model_factory=lambda: FakeModelSession([ScriptedTurn(tool_calls=(
         ToolCall("command_run", {"argv": ["python3", "-c", "print('stable authored output')"]}),))]),
         model_metadata={"provider": "unit-only"}, runtime_factory=runtime_factory)
-    result = run_service.run(case["workspace"], IMAGE, tmp_path / "original", RunLimits(max_turns=1))
+    result = run_service.run(case["workspace"], IMAGE, tmp_path / "original", RunLimits())
     assert audit_run(Path(result.run_dir))["integrity"] == "passed"
     replay = replay_run(run_dir=Path(result.run_dir), workspace=case["workspace"], output=tmp_path / "replays", runtime_factory=runtime_factory)
     assert json.loads(replay.read_text())["status"] == "matched"
@@ -148,7 +149,7 @@ def test_holdout_separation_and_unauthorized_preflight(dataset, tmp_path):
     service = LocalChallengeService(model_factory=lambda: pytest.fail("unauthorized preflight opened provider"), model_metadata={})
     with pytest.raises(PermissionError):
         run_evaluation(dataset_path=holdout, service=service, runtime_image=IMAGE, output=tmp_path / "denied",
-                       limits=RunLimits(), max_total_turns=1, max_total_tool_calls=1, development_reference=dataset)
+                       limits=RunLimits(), development_reference=dataset)
 
 
 def test_generated_datasets_have_no_answer_files_and_reject_old_schema(dataset):

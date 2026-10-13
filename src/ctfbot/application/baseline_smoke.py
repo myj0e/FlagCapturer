@@ -70,7 +70,7 @@ def run_synthetic_smoke() -> tuple[bool, str]:
             ScriptedTurn(tool_calls=(ToolCall("command_run", {"argv": ["synthetic", "check"]}),)),
             ScriptedTurn(tool_calls=(
                 ToolCall("candidate_submit", {"candidate": expected}),
-                ToolCall("run_complete", {"outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Synthetic candidate recorded", "unresolved": ["competition confirmation"]}),
+                ToolCall("run_complete", {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', "outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Synthetic candidate recorded", "unresolved": []}),
                 ToolCall("command_run", {"argv": ["must-not-run"]}),
             )),
         ))
@@ -79,7 +79,7 @@ def run_synthetic_smoke() -> tuple[bool, str]:
             model,
             registry,
             evidence,
-            limits=RunLimits(max_turns=6, max_tool_calls=8, wall_time_seconds=30),
+            limits=RunLimits(),
             challenge_id="synthetic-stage-a",
         ).run(task)
         records = [json.loads(line) for line in (run_root / "synthetic-run" / "events.jsonl").read_text().splitlines()]

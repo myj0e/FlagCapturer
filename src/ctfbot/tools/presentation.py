@@ -29,7 +29,7 @@ def render(payload: dict, maximum: int, *, artifact: dict | None = None) -> str:
         return full
     result: dict = {"truncated": True}
     for key in ("status", "error_kind", "execution_state", "exit_code", "timed_out", "session_id",
-                "source_ref", "observation_id", "candidate_id", "claim_id", "experiment_id", "revision", "next_cursor", "output_warning"):
+                "source_ref", "observation_id", "candidate_id", "candidate_ids", "subtask", "claim_id", "experiment_id", "revision", "next_cursor"):
         if key in payload:
             trial = {**result, key: payload[key]}
             if len(dumps(trial).encode()) <= maximum:

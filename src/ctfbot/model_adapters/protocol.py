@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 
@@ -30,9 +30,18 @@ class ToolCall:
 
 
 @dataclass(frozen=True, slots=True)
+class ToolImage:
+    """Provider-neutral inline image. Binary payloads never enter text replies."""
+
+    data: bytes = field(repr=False)
+    media_type: str = "image/png"
+
+
+@dataclass(frozen=True, slots=True)
 class ToolReply:
     content: str
     success: bool = True
+    images: tuple[ToolImage, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,16 +56,36 @@ class TurnResult:
 ToolHandler = Callable[[ToolCall], ToolReply]
 
 
+class ContextCompactionRequired(Exception):
+    """Cooperative yield at a context checkpoint, before executing another tool."""
+
+
+class ResettableModelSession(Protocol):
+    """Optional transport capability: discard conversation, retain tool runtime.
+
+    Call reset_context only after run_turn returns or propagates
+    ContextCompactionRequired. Adapters must propagate that signal unchanged.
+    Checkpoints, if supported, run synchronously on the run_turn thread after
+    usage notifications. They must never run in a background callback thread.
+    """
+
+    def reset_context(self) -> None: ...
+
+    def set_context_checkpoint(self, checkpoint: Callable[[], None]) -> None: ...
+
+
 class ModelSession(Protocol):
     """One conversation with a provider; the provider may call ctfbot tools."""
 
+    # Optional capability: adapters without supports_images are text-only.
+    # Image-capable adapters must transmit ToolReply.images as actual media.
     def run_turn(
         self,
         prompt: str,
         tools: Sequence[ToolSpec],
         on_tool_call: ToolHandler,
         *,
-        timeout: float,
+        timeout: float | None,
     ) -> TurnResult: ...
 
     def close(self) -> None: ...
@@ -84,13 +113,13 @@ class FakeModelSession:
         tools: Sequence[ToolSpec],
         on_tool_call: ToolHandler,
         *,
-        timeout: float,
+        timeout: float | None,
     ) -> TurnResult:
         del prompt, timeout
         if self.closed:
             raise RuntimeError("fake model session is closed")
         if self._index >= len(self._turns):
-            return TurnResult(text="", finish_reason="fake_transcript_exhausted")
+            raise RuntimeError("fake provider transcript exhausted without explicit completion")
         turn = self._turns[self._index]
         self._index += 1
         for call in turn.tool_calls:

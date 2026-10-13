@@ -109,7 +109,7 @@ class RunContextState:
             missing = {path: status for path, status in sources.items() if status != "present_hash_unchecked"}
             view = {"id": key, "record_artifact": source, "omitted_fields": list(record),
                     "source_status": dict(list(missing.items())[:16]), "additional_source_issues": max(0, len(missing)-16),
-                    **{k: record[k] for k in ("status", "tool", "state", "revision") if k in record}}
+                    **{k: record[k] for k in ("status", "tool", "state", "revision", "subtask", "candidate_id") if k in record}}
         return view
 
     def read(self, args: dict) -> dict:
@@ -155,23 +155,30 @@ class RunContextState:
                    "provider_context": self.registry.provider_context,
                    "resume_supported": False, "retrieve": "state_read(section, id or cursor); artifact_read",
                    "omitted_sections": []}
+        # Reserve half the envelope for indexed records. Oversized metadata is
+        # archived verbatim, with a retrievable reference rather than truncation.
+        for field in sorted(("model_reported_summary", "budget", "provider_context", "constraints"),
+                            key=lambda key: len(encode(payload[key]).encode()), reverse=True):
+            if len(encode(payload).encode()) <= MAX_CONTEXT_BYTES // 2:
+                break
+            value = payload[field]
+            if len(encode(value).encode()) <= 512:
+                continue
+            source = self.registry.evidence.write_artifact(encode(value).encode(), media_type="application/json")
+            payload[field] = {"record_artifact": source, "retrieve": "artifact_read", "omitted": True}
         for section in ("sessions", "scripts", "candidates", "experiments", "claims", "observations", "checkpoints"):
             records = self.records(section)
             keys = list(records)
-            selected = keys[-3:]
-            views = [self._view(key, records[key]) for key in selected]
-            trial = {**payload, section: views}
-            if len(encode(trial).encode()) <= MAX_CONTEXT_BYTES - 512:
-                payload = trial
-            else:
-                selected = []
-            if len(selected) < len(keys):
+            views = []
+            # Prefer newest records; expose them in their original order.
+            for key in reversed(keys[-3:]):
+                proposed = [self._view(key, records[key]), *views]
+                if len(encode({**payload, section: proposed}).encode()) <= MAX_CONTEXT_BYTES - 512:
+                    views = proposed
+            payload[section] = views
+            if len(views) < len(keys):
                 payload["omitted_sections"].append(section)
         text = encode(payload)
-        if len(text.encode()) > MAX_CONTEXT_BYTES:
-            # Summary has a bounded schema, but Unicode can exceed the byte ceiling.
-            payload["model_reported_summary"] = {"revision": state.summary["revision"], "read": "state_read summary latest"} if state.summary else None
-            text = encode(payload)
         artifact = self.registry.evidence.write_artifact(text.encode(), media_type="application/json")
         self.registry.evidence.append("context_snapshot", reason=reason, revision=self.revision,
                                       bytes=len(text.encode()), snapshot=artifact)

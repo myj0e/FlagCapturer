@@ -16,7 +16,7 @@ from ctfbot.runtime.service_recovery import (
 FIXTURE_ARGV = ["/usr/local/bin/python3", "/opt/ctfbot-fixture/server.py"]
 _CASES = {"solve": "candidate_unverified", "cancel": "user_cancelled", "cancel_startup": "user_cancelled",
           "provider_failure": "provider_error", "readiness_timeout": "error",
-          "run_timeout": "budget_exhausted", "service_exit": "error"}
+          "run_timeout": "error", "service_exit": "error"}
 _PROFILE_FIELDS = {"schema_version", "network_profile", "daemon", "service_image", "solver_image",
                    "service_argv", "service_port", "authorization_basis", "acceptance_path", "acceptance_sha256"}
 
@@ -48,7 +48,10 @@ def approve_service_profile(acceptance_path: Path, basis: str, *, destination: P
         raise ValueError("missing lifecycle acceptance")
     for case, expected in _CASES.items():
         result = lifecycle.get(case, {})
-        if not isinstance(result, dict) or result.get("status") != expected or result.get("removed") is not True:
+        # Old receipts exercised the now-removed overall run deadline. Keep
+        # those receipts readable; new ones exercise a single startup timeout.
+        accepted = {expected, "budget_exhausted"} if case == "run_timeout" else {expected}
+        if not isinstance(result, dict) or result.get("status") not in accepted or result.get("removed") is not True:
             raise ValueError(f"missing successful lifecycle acceptance: {case}")
     recovery = receipt.get("recovery", {})
     if not isinstance(recovery, dict) or set(recovery) != {"network_create", "container_create", "container_start"} or any(

@@ -13,7 +13,7 @@ from ctfbot.evidence.store import EvidenceStore
 from ctfbot.model_adapters.protocol import FakeModelSession, ScriptedTurn, ToolCall
 from ctfbot.runtime.docker import DockerRuntime
 from ctfbot.runtime.docker import RuntimeErrorSafe
-from ctfbot.runtime.sessions import InteractiveReadResult
+from ctfbot.runtime.sessions import InteractiveReadResult, InteractiveSession
 from ctfbot.tools.registry import CommandResult, ToolRegistry
 
 
@@ -114,12 +114,13 @@ def test_recoverable_timeout_allows_model_to_continue(tmp_path: Path):
     model = FakeModelSession([ScriptedTurn(tool_calls=(
         ToolCall("command_run", {"argv": ["batch1"]}),
         ToolCall("command_run", {"argv": ["batch2"]}),
+        ToolCall("run_complete", {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', "outcome":"unsolved", "summary":"No justified next step", "unresolved":[]}),
     ))])
     evidence = EvidenceStore(tmp_path / "run")
     result = AgentLoop(model, ToolRegistry(challenge, work, evidence, runtime), evidence).run("synthetic")
-    assert runtime.calls == 2 and result.status == "unverified"
+    assert runtime.calls == 2 and result.status == "unsolved"
     events = [json.loads(line) for line in (evidence.run_dir / "events.jsonl").read_text().splitlines()]
-    assert [e['result']['status'] for e in events if e['event_type'] == 'tool_result'] == ['timeout', 'ok']
+    assert [e['result']['status'] for e in events if e['event_type'] == 'tool_result'] == ['timeout', 'ok', 'run_complete']
     assert not any(e['event_type'] == 'sandbox_error' for e in events)
 
 
@@ -201,3 +202,134 @@ def test_coalesced_session_read_combines_heartbeats_and_terminal_state(tmp_path)
     assert reply['execution_state']=='exited' and reply['output_idle_seconds']==1
     assert read.result['bytes']==len(reply['output'])
     assert not tools.invoke(ToolCall('session_read',{'session_id':sid,'collect_seconds':61})).reply.success
+
+
+def test_interactive_session_output_cap_only_truncates_retention():
+    recorded = bytearray()
+    forced = []
+    closed = []
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-u",
+            "-c",
+            "import os,time; os.write(1,b'x'*8192); time.sleep(0.2); "
+            "os.write(1,b'continued\\n')",
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=0,
+    )
+    session = InteractiveSession(
+        "output-retention-test",
+        process,
+        idle_timeout=2,
+        total_timeout=5,
+        output_limit=64,
+        on_output=recorded.extend,
+        on_closed=lambda status, code: closed.append((status, code)),
+        on_force_close=lambda: forced.append(True),
+    )
+    output = bytearray()
+    saw_truncated = False
+    deadline = time.monotonic() + 3
+    try:
+        first = session.read(timeout=1, maximum_bytes=128)
+        output.extend(first.data)
+        saw_truncated = first.truncated
+        assert first.status == "running"
+        assert process.poll() is None
+        while time.monotonic() < deadline:
+            result = session.read(timeout=0.2, maximum_bytes=128)
+            output.extend(result.data)
+            saw_truncated = saw_truncated or result.truncated
+            if result.status != "running":
+                break
+        session.close()
+        assert result.status == "exited"
+        assert result.exit_code == 0
+        assert b"continued" in output
+        assert saw_truncated
+        assert recorded == b"x" * 64
+        assert forced == []
+        assert closed == [("exited", 0)]
+    finally:
+        session.close()
+
+
+def test_interactive_session_idle_timeout_closes_cooperative_process_only():
+    forced = []
+    closed = []
+    process = subprocess.Popen(
+        [sys.executable, "-u", "-c",
+         "import sys; print('ready', flush=True); sys.stdin.buffer.read(1); print('closed', flush=True)"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=0,
+    )
+    session = InteractiveSession(
+        "cooperative-idle-timeout",
+        process,
+        idle_timeout=0.2,
+        total_timeout=5,
+        output_limit=1024,
+        on_output=lambda _data: None,
+        on_closed=lambda status, code: closed.append((status, code)),
+        on_force_close=lambda: forced.append(True),
+    )
+
+    try:
+        first = session.read(timeout=1, maximum_bytes=128)
+        result = InteractiveReadResult(b"", "running", None)
+        deadline = time.monotonic() + 3
+        while result.status == "running" and time.monotonic() < deadline:
+            result = session.read(timeout=0.5, maximum_bytes=128)
+        assert b"ready" in first.data
+        assert result.status == "idle_timeout" and result.timed_out
+        assert result.exit_code == 0
+        assert process.poll() == 0
+        assert forced == []
+        session.close()
+        assert closed == [("idle_timeout", 0)]
+    finally:
+        session.close()
+
+
+def test_session_read_collects_after_output_retention_cap(tmp_path: Path):
+    challenge, work = tmp_path / "challenge", tmp_path / "work"
+    challenge.mkdir()
+    work.mkdir()
+
+    class Runtime:
+        def start_interactive(self, *args, **kwargs):
+            pass
+
+        def send_interactive(self, *args, **kwargs):
+            pass
+
+        def read_interactive(self, *args, **kwargs):
+            return next(self.results)
+
+        def close_interactive(self, *args, **kwargs):
+            return InteractiveReadResult(b"", "closed", 0)
+
+    runtime = Runtime()
+    runtime.results = iter([
+        InteractiveReadResult(b"first\n", "running", None, truncated=True),
+        InteractiveReadResult(b"continued\n", "exited", 0, truncated=True),
+    ])
+    tools = ToolRegistry(challenge, work, EvidenceStore(tmp_path / "run"), runtime)
+    started = tools.invoke(ToolCall("session_start", {"argv": ["synthetic"]}))
+    session_id = json.loads(started.reply.content)["session_id"]
+
+    read = tools.invoke(ToolCall("session_read", {
+        "session_id": session_id,
+        "wait_seconds": 0,
+        "collect_seconds": 1,
+    }))
+    payload = json.loads(read.reply.content)
+    assert payload["output"] == "first\ncontinued\n"
+    assert payload["execution_state"] == "exited"
+    assert payload["truncated"] is True

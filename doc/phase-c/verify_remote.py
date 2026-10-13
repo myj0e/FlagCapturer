@@ -205,10 +205,10 @@ def verify(image: str, output: Path, recovery_acceptance: Path | None = None):
                     response=json.loads(reply.content)
                     flag=base64.b64decode(response['data_base64']).decode()
                     assert on_tool_call(ToolCall('candidate_submit',dict(candidate=flag))).success
-                    assert on_tool_call(ToolCall('run_complete',dict(outcome='candidate_unverified',candidate_id='candidate-1',summary='Synthetic response recorded',unresolved=[]))).success
+                    assert on_tool_call(ToolCall('run_complete',dict(outcome='candidate_unverified',candidate_id='candidate-1',summary='Synthetic response recorded',unresolved=[],writeup='# Authored remote solution\n\nReproduce the recorded local fixture exchange.'))).success
                     return TurnResult(text='authored TCP solve',tool_calls=2)
             service=LocalChallengeService(model_factory=Solver,model_metadata={'provider':'authored'},remote_runtime_factory=factory)
-            result=service.run(workspace,image,output/'runs',RunLimits(max_turns=1,wall_time_seconds=30))
+            result=service.run(workspace,image,output/'runs',RunLimits())
             assert result.status == 'candidate_unverified', result
             run=Path(result.run_dir)
             report=generate_basic_report(run)
@@ -216,7 +216,7 @@ def verify(image: str, output: Path, recovery_acceptance: Path | None = None):
             record('solve','candidate_unverified',run_dir=str(run),audit=audit_run(run))
             def failure(): raise RuntimeError('authored provider startup failure')
             service=LocalChallengeService(model_factory=failure,model_metadata={'provider':'authored-failure'},remote_runtime_factory=factory)
-            failed=service.run(workspace,image,output/'failed-runs',RunLimits(max_turns=1,wall_time_seconds=30))
+            failed=service.run(workspace,image,output/'failed-runs',RunLimits())
             assert failed.status=='provider_error' and failed.stop_reason=='provider_initialization_error'
             assert json.loads((Path(failed.run_dir)/'run-state.json').read_text())['cleanup_status']=='complete'
             record('provider_failure','cleaned',run_dir=failed.run_dir)
@@ -237,7 +237,7 @@ def verify(image: str, output: Path, recovery_acceptance: Path | None = None):
                 from textual.widgets import Input
                 from ctfbot.tui.app import CTFBotApp
                 app=CTFBotApp(service=selected_service,runtime_image=image,runs_root=target,
-                              limits=RunLimits(max_turns=1,wall_time_seconds=30))
+                              limits=RunLimits())
                 async with app.run_test(size=(120,40)) as pilot:
                     app.query_one('#workspace-path',Input).value=str(workspace)
                     await pilot.click('#preview')

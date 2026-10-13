@@ -14,7 +14,6 @@ import tempfile
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -244,18 +243,15 @@ def run_baseline(
         "platform": platform.platform(),
         "ctfbot_commit": _git_commit(Path.cwd()),
         "runtime_image": runtime_image,
-        "verification": {"method": "model-selected candidate; correctness unverified"},
+        "verification": {"method": "agent-submitted flag completes its objective; no platform verification required"},
         "local_service": provenance.get("local_service"),
         "remote": provenance.get("remote"),
         "domain_packs": pack_snapshot(),
         "memory": memory_view.metadata(),
         "limits": {
-            "max_turns": limits.max_turns,
-            "max_tool_calls": limits.max_tool_calls,
-            "wall_time_seconds": limits.wall_time_seconds,
+            "automatic_budget_stop": False,
             "tool_timeout_seconds": limits.tool_timeout_seconds,
             "per_tool_output_bytes": limits.per_tool_output_bytes,
-            "total_model_output_bytes": limits.total_model_output_bytes,
         },
     }
     meta_path = run_dir / "run.json"
@@ -320,16 +316,12 @@ def run_baseline(
         if remote is not None:
             assert remote_runtime_factory is not None
             runtime = remote_runtime_factory(challenge_input, runtime_image, remote, record_remote_event)
-            runtime.set_startup_deadline(baseline_started + limits.wall_time_seconds)
         elif local_service is not None:
             assert service_runtime_factory is not None
             runtime = service_runtime_factory(
                 challenge_input, runtime_image, local_service,
                 record_service_event,
             )
-            set_deadline = getattr(runtime, "set_startup_deadline", None)
-            if callable(set_deadline):
-                set_deadline(baseline_started + limits.wall_time_seconds)
         else:
             runtime = runtime_factory(challenge_input, runtime_image) if runtime_factory else DockerRuntime(
                 challenge_input,
@@ -352,8 +344,6 @@ def run_baseline(
         with runtime:
             if control is not None and control.cancelled:
                 raise RuntimeError("run cancelled during runtime preparation")
-            if time.monotonic() - baseline_started >= limits.wall_time_seconds:
-                raise TimeoutError("runtime startup exhausted the run wall-time budget")
             if model is None:
                 phase = "provider_initialization"
                 lifecycle.transition("starting", phase=phase)
@@ -368,10 +358,6 @@ def run_baseline(
                     cancel_model = getattr(model, "cancel", None)
                     if callable(cancel_model):
                         control.add_cancel_callback(cancel_model)
-            elapsed_startup = time.monotonic() - baseline_started
-            remaining_wall_time = limits.wall_time_seconds - elapsed_startup
-            if remaining_wall_time <= 0:
-                raise TimeoutError("runtime startup exhausted the run wall-time budget")
             registry = ToolRegistry(
                 challenge_input,
                 controller_work,
@@ -386,7 +372,7 @@ def run_baseline(
                 model,
                 registry,
                 evidence,
-                limits=replace(limits, wall_time_seconds=remaining_wall_time),
+                limits=limits,
                 challenge_id=challenge_id,
                 challenge_provenance=provenance,
                 control=control,
@@ -485,8 +471,8 @@ def run_baseline(
             failure_class = "provider_error"
             lifecycle_state = "failed"
         elif isinstance(exc, TimeoutError):
-            status = "budget_exhausted"
-            stop_reason = "wall_time_exhausted"
+            status = "error"
+            stop_reason = "runtime_startup_timeout"
             failure_class = "timeout"
             lifecycle_state = "timed_out"
         else:

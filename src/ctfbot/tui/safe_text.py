@@ -5,6 +5,9 @@ from __future__ import annotations
 import unicodedata
 
 from textual.widgets import Input
+from textual.document._document import EditResult, Location
+
+from ctfbot.tui.clipboard_area import ClipboardTextArea
 
 
 def safe_plain_text(value: object) -> str:
@@ -33,3 +36,26 @@ class SafePathInput(Input):
             self.value = safe_value
             return
         super()._watch_value(value)
+
+
+def safe_prompt_text(value: str) -> str:
+    """Preserve editable lines and indentation, escaping other terminal controls."""
+    value = value.replace("\r\n", "\n").replace("\r", "\n")
+    return "".join(char if char in "\n\t" else safe_plain_text(char) for char in value)
+
+
+class SafePromptArea(ClipboardTextArea):
+    """Multiline hints with the same control-character handling as path inputs."""
+
+    def _set_document(self, text: str, language: str | None) -> None:
+        super()._set_document(safe_prompt_text(text), language)
+
+    def insert(self, text: str, location: Location | None = None, *,
+               maintain_selection_offset: bool = True) -> EditResult:
+        return super().insert(safe_prompt_text(text), location,
+                              maintain_selection_offset=maintain_selection_offset)
+
+    def replace(self, insert: str, start: Location, end: Location, *,
+                maintain_selection_offset: bool = True) -> EditResult:
+        return super().replace(safe_prompt_text(insert), start, end,
+                               maintain_selection_offset=maintain_selection_offset)

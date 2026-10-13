@@ -79,7 +79,7 @@ def test_forgetful_provider_recovers_summary_failure_script_and_session(tmp_path
             assert session['id'] == script['last_execution']['session_id']
             assert session['freshness'] == 'unknown' and runtime.reads == 0
             dispatch(ToolCall('session_close', {'session_id':session['id']}))
-            dispatch(ToolCall('run_complete', {'outcome':'unsolved','summary':'Recovered state','unresolved':[]}))
+            dispatch(ToolCall('run_complete', {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', 'outcome':'unsolved','summary':'Recovered state','unresolved':[]}))
             return TurnResult('', tool_calls=6)
     result = AgentLoop(Forgetful([]), tools, tools.evidence).run('authored task')
     assert result.status == 'unsolved' and result.turns == 2
@@ -185,26 +185,36 @@ def test_artifact_tail_literal_find_binary_unicode_and_integrity(tmp_path):
     assert not tools.invoke(ToolCall('artifact_tail',{'artifact':ref['artifact'],'length':10,'encoding':'utf8'})).reply.success
 
 
-def test_normal_budget_exhaustion_preserves_recovery_completion_and_counts_denials(tmp_path):
-    runtime = Runtime()
-    tools = registry(tmp_path,runtime=runtime)
+def test_cumulative_tool_replies_do_not_shrink_or_block_execution(tmp_path):
+    class VerboseRuntime(Runtime):
+        def execute(self, argv, *, timeout):
+            self.executions += 1
+            return CommandResult(0, b'x' * 4096, b'')
+    runtime = VerboseRuntime()
+    tools = registry(tmp_path, runtime=runtime)
     observed = []
     class Provider(FakeModelSession):
         def run_turn(self, prompt, specs, dispatch, *, timeout):
-            for tool in [ToolCall('command_run',{'argv':['first']}), ToolCall('command_run',{'argv':['denied']}),
-                         ToolCall('state_read',{'section':'overview'}),
-                         ToolCall('run_complete',{'outcome':'unsolved','summary':'Budget used','unresolved':[]})]:
-                reply = dispatch(tool)
+            for _ in range(100):
+                reply = dispatch(ToolCall('command_run', {'argv': ['verbose']}))
+                assert reply.success
+                assert len(json.loads(reply.content)['stdout']) == 4096
+                assert 'output_warning' not in json.loads(reply.content)
                 observed.append(reply.content)
-            return TurnResult('',tool_calls=4)
-    loop = AgentLoop(Provider([]),tools,tools.evidence,limits=RunLimits(total_model_output_bytes=256))
+            observed.append(dispatch(ToolCall('state_read', {'section': 'overview'})).content)
+            observed.append(dispatch(ToolCall('run_complete', {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.',
+                'outcome': 'unsolved', 'summary': 'done', 'unresolved': []})).content)
+            return TurnResult('', tool_calls=102)
+    loop = AgentLoop(Provider([]), tools, tools.evidence, limits=RunLimits())
     result = loop.run('authored')
-    assert result.status == 'budget_exhausted' and runtime.executions == 1
-    assert json.loads(observed[2])['section'] == 'overview' and tools.reliability.completion
-    telemetry = loop.reply_budget.telemetry()
-    assert telemetry['tool_reply_bytes'] == sum(len(s.encode()) for s in observed)
-    assert telemetry['pools']['recovery']['used'] > 0 and telemetry['pools']['closing']['used'] > 0
-    assert all(p['used'] <= p['limit'] for p in telemetry['pools'].values())
+    assert result.status == 'unsolved' and runtime.executions == 100
+    assert json.loads(observed[-2])['section'] == 'overview' and tools.reliability.completion
+    telemetry = loop.transmission.telemetry()
+    assert telemetry['tool_reply_bytes'] == sum(len(text.encode()) for text in observed)
+    assert telemetry['pools']['ordinary']['used'] > 256 * 1024
+    assert 'ordinary_warning' not in telemetry
+    assert 'remaining_output_bytes' not in tools.reliability.budget_feedback
+    assert all(set(pool) == {'used'} for pool in telemetry['pools'].values())
 
 
 def event(kind, epoch='compact-1'):
@@ -212,8 +222,8 @@ def event(kind, epoch='compact-1'):
             'timestamp_utc':datetime.now(timezone.utc).isoformat(),'source':'synthetic'}
 
 
-@pytest.mark.parametrize('small_budget', [False,True])
-def test_compaction_dedup_and_actual_tool_reply_restoration(tmp_path, small_budget):
+@pytest.mark.parametrize('per_reply', [256, 16 * 1024])
+def test_compaction_dedup_and_actual_tool_reply_restoration(tmp_path, per_reply):
     tools = registry(tmp_path)
     replies = []
     class Provider(FakeModelSession):
@@ -222,17 +232,19 @@ def test_compaction_dedup_and_actual_tool_reply_restoration(tmp_path, small_budg
         def run_turn(self, prompt, specs, dispatch, *, timeout):
             self.handler(event('compaction_completed'))
             self.handler(event('compaction_completed'))
-            replies.append(dispatch(ToolCall('state_read',{'section':'overview'})).content)
+            reply = dispatch(ToolCall('state_read',{'section':'overview'}))
+            assert reply.success
+            replies.append(reply.content)
             replies.append(dispatch(ToolCall('state_read',{'section':'summary'})).content)
-            dispatch(ToolCall('run_complete',{'outcome':'unsolved','summary':'done','unresolved':[]}))
+            dispatch(ToolCall('run_complete',{"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', 'outcome':'unsolved','summary':'done','unresolved':[]}))
             return TurnResult('',tool_calls=3)
-    limits = RunLimits(recovery_output_bytes=256) if small_budget else RunLimits()
+    limits = RunLimits(per_tool_output_bytes=per_reply)
     loop = AgentLoop(Provider([]),tools,tools.evidence,limits=limits)
     loop.run('authored')
     events = [json.loads(line) for line in tools.evidence.events_path.read_text().splitlines()]
     restores = [e for e in events if e['event_type']=='context_restore_delivered']
     assert len([e for e in events if e['event_type']=='provider_compaction_completed']) == 1
-    if small_budget:
+    if per_reply == 256:
         assert not restores and loop.context_events.pending == 'compact-1'
     else:
         assert len(restores) == 1 and json.loads(replies[0])['context_restore']['run_id'] == loop.run_id
@@ -259,7 +271,7 @@ def test_usage_cumulative_snapshots_are_deltas_and_queue_is_bounded(tmp_path):
     assert context.billing_totals == {'inputTokens':150}
     for _ in range(1000):
         context.enqueue(event('context_usage'))
-    assert len(context._queue) == 1
+    assert len(context._queue) == 0
 
 
 def test_mailboxes_coalesce_usage_preserve_critical_and_fail_explicitly():
@@ -303,28 +315,31 @@ def test_compaction_restores_at_next_continuation_and_charges_prompt_separately(
                 self._index += 1
                 return TurnResult('',tool_calls=1)
             assert 'turn_boundary' in prompt and 'task_artifact' in prompt
-            dispatch(ToolCall('run_complete', {'outcome':'unsolved','summary':'done','unresolved':[]}))
+            dispatch(ToolCall('run_complete', {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', 'outcome':'unsolved','summary':'done','unresolved':[]}))
             return TurnResult('',tool_calls=1)
     loop = AgentLoop(Provider([]),tools,tools.evidence)
     loop.run('authored task')
     events = [json.loads(line) for line in tools.evidence.events_path.read_text().splitlines()]
     restores = [e for e in events if e['event_type']=='context_restore_delivered']
     assert len(restores) == 1 and restores[0]['channel'] == 'continuation_prompt'
-    assert loop.reply_budget.prompt_restore_bytes > 0
+    assert loop.transmission.prompt_restore_bytes > 0
     replies = [e for e in events if e['event_type']=='tool_result']
-    assert loop.reply_budget.tool_reply_bytes == sum(e['response_evidence']['bytes'] for e in replies)
-    assert loop.reply_budget.prompt_bytes > loop.reply_budget.prompt_restore_bytes
+    assert loop.transmission.tool_reply_bytes == sum(e['response_evidence']['bytes'] for e in replies)
+    assert loop.transmission.prompt_bytes > loop.transmission.prompt_restore_bytes
 
 
 def test_no_following_tool_or_turn_never_claims_pending_restore_delivered(tmp_path):
+    from ctfbot.application.control import RunControl
+    control = RunControl()
     tools = registry(tmp_path)
     class Provider(FakeModelSession):
         def set_event_handler(self, handler):
             self.handler = handler
         def run_turn(self, prompt, specs, dispatch, *, timeout):
             self.handler(event('compaction_completed'))
+            control.cancel()
             return TurnResult('No tools.',tool_calls=0)
-    loop = AgentLoop(Provider([]),tools,tools.evidence)
+    loop = AgentLoop(Provider([]),tools,tools.evidence,control=control)
     loop.run('authored')
     assert loop.context_events.pending == 'compact-1'
     assert 'context_restore_delivered' not in tools.evidence.events_path.read_text()
@@ -358,21 +373,29 @@ def test_unicode_summary_snapshots_are_byte_bounded_and_missing_summary_is_expli
     assert not tools.invoke(ToolCall('state_read',{'section':'summary','id':'latest'})).reply.success
 
 
-def test_recovery_and_closing_pools_never_grow_under_denial_polling(tmp_path):
+def test_recovery_and_completion_have_no_cumulative_quota(tmp_path):
     tools = registry(tmp_path)
     replies = []
     class Provider(FakeModelSession):
+        def set_event_handler(self, handler):
+            self.handler = handler
         def run_turn(self, prompt, specs, dispatch, *, timeout):
             for _ in range(100):
-                replies.append(dispatch(ToolCall('state_read',{'section':'overview'})).content)
-            dispatch(ToolCall('run_complete',{'outcome':'unsolved','summary':'done','unresolved':[]}))
-            return TurnResult('',tool_calls=101)
-    loop = AgentLoop(Provider([]),tools,tools.evidence,limits=RunLimits(recovery_output_bytes=256,closing_output_bytes=256))
+                reply = dispatch(ToolCall('state_read',{'section':'overview'}))
+                assert reply.success
+                replies.append(reply.content)
+            self.handler(event('compaction_completed'))
+            restored = dispatch(ToolCall('state_read', {'section': 'overview'}))
+            assert restored.success and 'context_restore' in json.loads(restored.content)
+            dispatch(ToolCall('run_complete',{"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', 'outcome':'unsolved','summary':'done','unresolved':[]}))
+            return TurnResult('',tool_calls=102)
+    loop = AgentLoop(Provider([]),tools,tools.evidence,limits=RunLimits())
     loop.run('authored')
-    assert loop.reply_budget.used['ordinary'] == 0
-    assert loop.reply_budget.used['recovery'] <= 256 and loop.reply_budget.used['closing'] <= 256
-    assert sum(len(s.encode()) for s in replies) <= 512
-    assert not tools.reliability.completion
+    assert loop.transmission.used['ordinary'] == 0
+    assert loop.transmission.used['recovery'] > 32768
+    assert loop.transmission.used['closing'] > 0
+    assert all(len(text.encode()) <= loop.limits.per_tool_output_bytes for text in replies)
+    assert tools.reliability.completion
 
 
 def test_multibyte_preview_and_large_binary_raw_artifact_remain_readable(tmp_path):
@@ -461,24 +484,19 @@ def test_nested_json_crop_keeps_ids_and_references_without_partial_serialization
     assert len(rendered.encode()) <= 256
 
 
-@pytest.mark.parametrize('limit_kind', ['wall','count'])
-def test_recovery_pool_cannot_bypass_wall_time_or_explicit_tool_count(tmp_path, limit_kind):
+def test_elapsed_time_does_not_deny_recovery_or_change_completion(tmp_path):
     from unittest.mock import patch
     tools = registry(tmp_path)
     denied = []
     class Provider(FakeModelSession):
         def run_turn(self, prompt, specs, dispatch, *, timeout):
-            if limit_kind == 'count':
-                dispatch(ToolCall('challenge_list', {'path':'.'}))
+            with patch('ctfbot.agent.loop.time.monotonic', return_value=1_000_000_000.0):
                 reply = dispatch(ToolCall('state_read', {'section':'overview'}))
-            else:
-                with patch('ctfbot.agent.loop.time.monotonic', return_value=float('inf')):
-                    reply = dispatch(ToolCall('state_read', {'section':'overview'}))
             denied.append(reply)
-            dispatch(ToolCall('run_complete', {'outcome':'unsolved','summary':'Resource budget exhausted','unresolved':[]}))
+            dispatch(ToolCall('run_complete', {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', 'outcome':'unsolved','summary':'Resource budget exhausted','unresolved':[]}))
             return TurnResult('',tool_calls=3)
-    limits = RunLimits(max_tool_calls=1) if limit_kind == 'count' else RunLimits()
+    limits = RunLimits()
     result = AgentLoop(Provider([]),tools,tools.evidence,limits=limits).run('authored')
-    assert result.status == 'budget_exhausted' and not denied[0].success
-    assert json.loads(denied[0].content)['budget'] in {'max_tool_calls','wall_time_seconds'}
+    assert result.status == 'unsolved' and denied[0].success
+    assert json.loads(denied[0].content)['section'] == 'overview'
     assert tools.reliability.completion

@@ -15,6 +15,7 @@ from typing import Any
 
 from ctfbot.model_adapters.mailbox import MessageBuffer, MessageQueue, PublicTextBuffer
 from ctfbot.model_adapters.events import normalize_event
+from ctfbot.model_adapters.protocol import ContextCompactionRequired
 from ctfbot import __version__
 from ctfbot.evidence.redaction import redact_sensitive_text
 
@@ -145,7 +146,7 @@ class CodexAppServer:
                 self._process_error(f'Could not write to Codex App Server: {_redact(str(exc))}')
             ) from exc
 
-    def _next_message(self, timeout: float) -> dict[str, Any]:
+    def _next_message(self, timeout: float | None) -> dict[str, Any]:
         try:
             message = self._messages.get(timeout=timeout)
         except OverflowError as exc:
@@ -263,11 +264,11 @@ class CodexAppServer:
             raise CodexAppServerError(f'ChatGPT sign-in failed: {error}')
         return self.account()
 
-    def models(self) -> list[dict[str, Any]]:
+    def models(self, *, include_hidden: bool = False) -> list[dict[str, Any]]:
         models: list[dict[str, Any]] = []
         cursor: str | None = None
         for _ in range(10):
-            params: dict[str, Any] = {'limit': 100, 'includeHidden': False}
+            params: dict[str, Any] = {'limit': 100, 'includeHidden': include_hidden}
             if cursor:
                 params['cursor'] = cursor
             result = self.request('model/list', params)
@@ -317,13 +318,13 @@ class CodexAppServer:
         *,
         cwd: str | None = None,
         effort: str | None = None,
-        timeout: float = 120,
+        timeout: float | None = None,
         on_message: Any = None,
         on_event: Any = None,
     ) -> dict[str, Any]:
         """Run one provider turn and answer ctfbot dynamic tool calls locally."""
         del tools  # Tool declarations are fixed when the thread starts.
-        deadline = time.monotonic() + timeout
+        deadline = time.monotonic() + timeout if timeout is not None else None
         params: dict[str, Any] = {
             'threadId': thread_id,
             'input': [{'type': 'text', 'text': prompt}],
@@ -335,7 +336,7 @@ class CodexAppServer:
             params['cwd'] = cwd
         if effort:
             params['effort'] = effort
-        start_remaining = deadline - time.monotonic()
+        start_remaining = deadline - time.monotonic() if deadline is not None else 30
         if start_remaining <= 0:
             raise CodexAppServerError('Codex App Server model turn timed out before start.')
         started = self.request('turn/start', params, timeout=min(30, start_remaining))
@@ -350,8 +351,8 @@ class CodexAppServer:
         tool_count = 0
         sequence = 0
         while completed_turn is None:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
+            remaining = deadline - time.monotonic() if deadline is not None else None
+            if remaining is not None and remaining <= 0:
                 raise CodexAppServerError('Codex App Server model turn timed out.')
             message = self._take_dynamic_turn_message(thread_id, turn_id, remaining)
             method = message.get('method')
@@ -389,13 +390,19 @@ class CodexAppServer:
                     reply = on_tool_call(call)
                     content = str(reply.get('content', '')) if isinstance(reply, dict) else str(reply)
                     success = bool(reply.get('success', True)) if isinstance(reply, dict) else True
+                    items = reply.get('contentItems') if isinstance(reply, dict) else None
+                    if not isinstance(items, list):
+                        items = [{'type': 'inputText', 'text': content}]
+                except ContextCompactionRequired:
+                    raise
                 except Exception as exc:
                     content = f'ctfbot tool handler error: {type(exc).__name__}'
                     success = False
+                    items = [{'type': 'inputText', 'text': content}]
                 self._send({
                     'id': message_id,
                     'result': {
-                        'contentItems': [{'type': 'inputText', 'text': content}],
+                        'contentItems': items,
                         'success': success,
                     },
                 })
@@ -437,8 +444,8 @@ class CodexAppServer:
             'tool_calls': tool_count,
         }
 
-    def _take_dynamic_turn_message(self, thread_id: str, turn_id: str, timeout: float) -> dict[str, Any]:
-        deadline = time.monotonic() + timeout
+    def _take_dynamic_turn_message(self, thread_id: str, turn_id: str, timeout: float | None) -> dict[str, Any]:
+        deadline = time.monotonic() + timeout if timeout is not None else None
 
         def matches(message: dict[str, Any]) -> bool:
             method = message.get('method')
@@ -468,8 +475,8 @@ class CodexAppServer:
                     self._unmatched.remove(queued)
                     self._send({'id': queued['id'], 'error': {'code': -32601,
                                 'message': 'Request does not belong to the active ctfbot turn.'}})
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
+            remaining = deadline - time.monotonic() if deadline is not None else None
+            if remaining is not None and remaining <= 0:
                 raise CodexAppServerError('Codex App Server model turn timed out.')
             message = self._next_message(remaining)
             if matches(message):

@@ -8,7 +8,7 @@ import threading
 from pathlib import Path
 
 from textual.app import App
-from textual.widgets import Input, Static
+from textual.widgets import Input, Static, Markdown, RichLog
 
 from ctfbot.agent.loop import RunLimits
 from ctfbot.application.service import LocalChallengeService
@@ -202,10 +202,10 @@ def test_tui_runs_synthetic_case_shows_evidence_and_generates_report(tmp_path: P
 
 async def _tui_runs_synthetic_case_shows_evidence_and_generates_report(tmp_path: Path) -> None:
     workspace = make_workspace(tmp_path)
-    model = FakeModelSession((ScriptedTurn(tool_calls=(ToolCall("candidate_submit", {"candidate": CANDIDATE}), ToolCall("run_complete", {"outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Retain candidate", "unresolved": ["competition confirmation"]}),)),))
+    model = FakeModelSession((ScriptedTurn(tool_calls=(ToolCall("candidate_submit", {"candidate": CANDIDATE}), ToolCall("run_complete", {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', "outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Retain candidate", "unresolved": []}),)),))
     service = make_service(lambda: model)
     app = CTFBotApp(service=service, runtime_image=IMAGE, runs_root=tmp_path / "runs",
-                    limits=RunLimits(max_turns=1, max_tool_calls=2))
+                    limits=RunLimits())
 
     async with app.run_test(size=(80, 24)) as pilot:
         fill_fields(app, workspace, tmp_path / "runs")
@@ -221,21 +221,34 @@ async def _tui_runs_synthetic_case_shows_evidence_and_generates_report(tmp_path:
 
         assert app.last_result is not None
         assert app.last_result.status == "candidate_unverified"
-        assert "verified" in static_text(app, "#status").lower()
+        assert "任务已完成" in static_text(app, "#status")
         assert CANDIDATE in "\n".join(app.displayed_events)
         assert app.query_one("#evidence").disabled is False
         assert app.query_one("#report").disabled is False
 
+        counters = (app._turn_count, app._tool_count, app._context_status.render())
         await pilot.click("#evidence")
         await pilot.pause(0.1)
-        assert any("candidate_submit" in line and "verified" in line for line in app.displayed_events)
+        assert app.query_one("#run-document").display
+        assert not app.query_one("#run-panels").display
+        assert app.query_one("#evidence-content", RichLog).lines
+        assert (app._turn_count, app._tool_count, app._context_status.render()) == counters
+        assert any("candidate_submit" in line and "Flag 已提交" in line for line in app.displayed_events)
         assert CANDIDATE in "\n".join(app.displayed_events)
         await pilot.click("#report")
         await pilot.pause(0.1)
         assert app.last_report_path is not None and app.last_report_path.is_file()
+        assert app.query_one("#report-scroll").display
+        assert not app.query_one("#evidence-content").display
+        assert app.query_one("#report-content", Markdown).query("MarkdownH1")
         report = app.last_report_path.read_text(encoding="utf-8")
         assert CANDIDATE not in report
-        assert "model-selected candidate; correctness unverified" in report
+        assert "agent-submitted flag completes its objective; no platform verification required" in report
+        await pilot.click("#toggle-layout")
+        await pilot.pause()
+        assert app.query_one("#run-panels").display
+        assert not app.query_one("#run-document").display
+        assert (app._turn_count, app._tool_count, app._context_status.render()) == counters
         app.exit()
 
 
@@ -245,28 +258,43 @@ def test_tui_records_alternate_candidate_without_automatically_completing(tmp_pa
 
 async def _tui_records_alternate_candidate_without_automatically_completing(tmp_path: Path) -> None:
     workspace = make_workspace(tmp_path)
-    model = FakeModelSession((ScriptedTurn(
+    blocked, release = threading.Event(), threading.Event()
+    class ContinuingModel(FakeModelSession):
+        def run_turn(self, prompt, tools, dispatch, *, timeout):
+            if self._index == 0:
+                return super().run_turn(prompt, tools, dispatch, timeout=timeout)
+            blocked.set()
+            assert release.wait(5)
+            raise RuntimeError("interrupted by manual Stop")
+        def cancel(self):
+            release.set()
+    model = ContinuingModel((ScriptedTurn(
         tool_calls=(ToolCall("candidate_submit", {"candidate": ALTERNATE_CANDIDATE}),)
     ),))
     service = make_service(lambda: model)
     app = CTFBotApp(service=service, runtime_image=IMAGE, runs_root=tmp_path / "runs",
-                    limits=RunLimits(max_turns=1, max_tool_calls=2))
+                    limits=RunLimits())
 
     async with app.run_test(size=(80, 24)) as pilot:
         fill_fields(app, workspace, tmp_path / "runs")
         await pilot.click("#preview")
         await pilot.pause(0.1)
         await pilot.click("#run")
+        assert await asyncio_wait(blocked, pilot)
         for _ in range(40):
-            await pilot.pause(0.1)
-            if app.last_result is not None:
+            if app.candidate_status is not None:
                 break
-
-        assert app.last_result is not None
-        assert app.last_result.status == "budget_exhausted"
+            await pilot.pause(.05)
+        assert app.last_result is None and app._run_active
         assert app.candidate_status == "unverified"
         assert ALTERNATE_CANDIDATE in "\n".join(app.displayed_events)
         assert "unverified" in "\n".join(app.displayed_events)
+        app.action_stop()
+        for _ in range(40):
+            await pilot.pause(.05)
+            if app.last_result is not None:
+                break
+        assert app.last_result is not None and app.last_result.status == "user_cancelled"
         app.exit()
 
 
@@ -297,7 +325,7 @@ async def _stop_action_cancels_blocked_model_without_freezing_ui(tmp_path: Path)
     model = BlockingModel()
     service = make_service(lambda: model)
     app = CTFBotApp(service=service, runtime_image=IMAGE, runs_root=tmp_path / "runs",
-                    limits=RunLimits(max_turns=1, max_tool_calls=2))
+                    limits=RunLimits())
 
     async with app.run_test(size=(80, 24)) as pilot:
         fill_fields(app, workspace, tmp_path / "runs")
@@ -338,7 +366,7 @@ async def _provider_error_event_does_not_display_submitted_candidate(tmp_path: P
 
     service = make_service(lambda: FailingModel())
     app = CTFBotApp(service=service, runtime_image=IMAGE, runs_root=tmp_path / "runs",
-                    limits=RunLimits(max_turns=1, max_tool_calls=2))
+                    limits=RunLimits())
 
     async with app.run_test(size=(80, 24)) as pilot:
         fill_fields(app, workspace, tmp_path / "runs")
@@ -365,3 +393,35 @@ async def asyncio_wait(event: threading.Event, pilot) -> bool:
             return True
         await pilot.pause(0.05)
     return event.is_set()
+
+
+def test_evidence_file_pagination_preserves_malformed_lines(tmp_path: Path) -> None:
+    asyncio.run(_evidence_file_pagination_preserves_malformed_lines(tmp_path))
+
+
+async def _evidence_file_pagination_preserves_malformed_lines(tmp_path: Path) -> None:
+    from ctfbot.tui.documents import RunDocumentView
+
+    path = tmp_path / "events.jsonl"
+    path.write_text("".join(json.dumps({"seq": index}) + "\n" for index in range(25))
+                    + '{"incomplete":\n', encoding="utf-8")
+    app = CTFBotApp(service=make_service(lambda: None), runtime_image=IMAGE)
+    async with app.run_test(size=(120, 40)) as pilot:
+        view = app.query_one("#run-document", RunDocumentView)
+        view.show_evidence(path)
+        app._select_run_view("evidence")
+        await pilot.pause()
+        assert app.query_one("#document-previous").disabled
+        assert not app.query_one("#document-next").disabled
+        await pilot.click("#document-next")
+        await pilot.pause()
+        assert view.page == 1
+        assert app.query_one("#document-next").disabled
+        log = app.query_one("#evidence-content", RichLog)
+        rendered = "\n".join(line.text for line in log.lines)
+        assert "无效 JSON" in rendered
+        assert '"incomplete"' in rendered
+        await pilot.click("#document-previous")
+        await pilot.pause()
+        assert view.page == 0
+        app.exit()

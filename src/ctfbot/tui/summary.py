@@ -36,9 +36,9 @@ class SolvingSummary:
         text.append("解题摘要（模型整理）\n", style="bold cyan")
         text.append("F3 隐藏 / 显示 · 可独立滚动\n\n", style="dim")
         if self.outcome:
-            text.append("运行状态：" + safe_plain_text(self.outcome) + "\n", style="bold yellow")
+            text.append("运行状态：" + safe_plain_text({"completed": "任务已完成", "candidate_unverified": "任务已完成", "partial": "部分任务完成"}.get(self.outcome, self.outcome)) + "\n", style="bold yellow")
         if self.candidate:
-            text.append("最近候选：" + safe_plain_text(self.candidate)[:200] + ("…" if len(safe_plain_text(self.candidate)) > 200 else "") + "\n原文与验证状态见 Flag 窗口\n", style="yellow")
+            text.append("最近候选：" + safe_plain_text(self.candidate)[:200] + ("…" if len(safe_plain_text(self.candidate)) > 200 else "") + "\n已提交 Flag 原文见 Flag 窗口\n", style="yellow")
         snapshot = self.snapshot
         if snapshot is None:
             text.append(f"\n当前第 {self.turn} 轮\n等待模型发布摘要。", style="dim")

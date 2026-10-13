@@ -26,7 +26,7 @@ _IMAGE_ID = re.compile(r"^sha256:[0-9a-f]{64}$")
 _MAX_INTERACTIVE_SESSIONS = 4
 _SESSION_IDLE_TIMEOUT = 60.0
 _SESSION_TOTAL_TIMEOUT = 600.0
-_SESSION_OUTPUT_BYTES = 1024 * 1024
+_SESSION_TRANSCRIPT_BYTES = 1024 * 1024
 
 
 class RuntimeErrorSafe(RuntimeError):
@@ -149,6 +149,17 @@ class DockerRuntime:
         )
 
     def execute(self, argv: list[str], *, timeout: float) -> CommandResult:
+        return self._execute(argv, timeout=timeout, output_limit=self.limits.command_output_bytes)
+
+    def render_image(self, path: str, crop: dict | None, *, timeout: float) -> CommandResult:
+        """Separate bounded binary transport; ordinary command caps stay intact."""
+        import json
+        from ctfbot.tools.image_view import IMAGE_RENDER_SCRIPT, IMAGE_TRANSPORT_BYTES, sandbox_image_path
+        request = json.dumps({"path": sandbox_image_path(path), "crop": crop}, separators=(",", ":"))
+        return self._execute(["python3", "-c", IMAGE_RENDER_SCRIPT, request], timeout=timeout,
+                             output_limit=IMAGE_TRANSPORT_BYTES)
+
+    def _execute(self, argv: list[str], *, timeout: float, output_limit: int) -> CommandResult:
         if self._closed:
             raise RuntimeErrorSafe("sandbox session is closed")
         if self._cancel_requested.is_set():
@@ -178,7 +189,7 @@ class DockerRuntime:
             self._kill_container()
             process.wait(timeout=5)
             raise RuntimeErrorSafe("sandbox session was cancelled")
-        stdout = _BoundedReader(process.stdout, self.limits.command_output_bytes)
+        stdout = _BoundedReader(process.stdout, output_limit)
         stderr = _BoundedReader(process.stderr, self.limits.command_output_bytes)
         stdout.start()
         stderr.start()
@@ -340,7 +351,7 @@ class DockerRuntime:
                 process,
                 idle_timeout=idle_timeout,
                 total_timeout=total_timeout,
-                output_limit=_SESSION_OUTPUT_BYTES,
+                output_limit=_SESSION_TRANSCRIPT_BYTES,
                 on_output=on_output,
                 on_closed=on_closed,
                 on_force_close=self._kill_container,
@@ -353,7 +364,7 @@ class DockerRuntime:
         """Long script: model decides on silence; supervisor bounds total time."""
         _validate_argv(argv)
         if not 0 < total_timeout <= 1800:
-            raise ValueError("script session total timeout must be within the run budget")
+            raise ValueError("single script timeout must be greater than 0 and at most 1800 seconds")
         def finished(status: str, code: int | None) -> None:
             if code == 125:
                 self._kill_container()

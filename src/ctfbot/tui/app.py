@@ -19,10 +19,11 @@ from typing import Any
 
 from rich.text import Text
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Horizontal, HorizontalScroll, Vertical, VerticalScroll
 from textual.content import Content
-from textual.events import MouseScrollDown, MouseScrollUp, Resize
-from textual.widgets import Button, Checkbox, Footer, Header, Input, Label, RichLog, Static
+from textual.theme import Theme
+from textual.events import MouseScrollUp, Resize
+from textual.widgets import Button, Checkbox, Footer, Header, Input, Label, RichLog, Static, TextArea
 
 from ctfbot.agent.loop import RunLimits, RunResult
 from ctfbot.application.control import RunControl
@@ -30,8 +31,11 @@ from ctfbot.application.runtime_images import RuntimeImageChoice, resolve_runtim
 from ctfbot.application.service import ChallengePreview, LocalChallengeService, create_codex_application_service
 from ctfbot.challenge.single_file import import_single_file, select_single_attachment
 from ctfbot.reporting import generate_basic_report
+from ctfbot.tui.documents import RunDocumentView
+from ctfbot.tui.context_status import ContextStatus
+from ctfbot.tui.history_log import HistoryLog
 from ctfbot.tui.candidates import CandidateScreen, FlagCandidate
-from ctfbot.tui.safe_text import SafePathInput, safe_plain_text
+from ctfbot.tui.safe_text import SafePathInput, SafePromptArea, safe_plain_text
 from ctfbot.tools.reliability import SUMMARY_SCHEMA
 from ctfbot.tools.schema import validate
 from ctfbot.tui.summary import SolvingSummary
@@ -49,34 +53,89 @@ class FileTransferCheckbox(Checkbox):
 class CTFBotApp(App[None]):
     """Preview, run, stop, inspect, and report one admitted local challenge."""
 
-    TITLE = "ctfbot — local challenge run"
-    BINDINGS = [("ctrl+q", "request_quit", "Quit"), ("f2", "toggle_layout", "Config / Log"), ("f3", "toggle_summary", "摘要")]
+    TITLE = "FlagCapturer"
+    SUB_TITLE = "CTF solving workbench"
+    BINDINGS = [("ctrl+q", "request_quit", "退出"), ("f2", "toggle_layout", "配置 / 记录"), ("f3", "toggle_summary", "摘要")]
     CSS = """
-    Screen { padding: 0; }
-    #body { height: 1fr; }
-    #fields { height: 12; padding: 0 1; }
-    .form-row { height: 2; }
-    .form-label { width: 22; content-align: left middle; }
-    Input { width: 1fr; height: 2; border: none; }
-    Checkbox { height: 2; padding: 0; border: none; }
-    #actions { height: 3; padding: 0 1; }
-    Button { margin-right: 1; min-width: 10; }
-    #status { height: 3; padding: 0 1; border: round $accent; }
-    #preview-details { height: 5; padding: 0 1; border: round $primary; overflow-y: auto; }
+    Screen { background: $background; color: $foreground; }
+    Header { background: $surface; color: $foreground; }
+    HeaderTitle { text-style: bold; }
+    Footer { background: $surface; }
+    #body { height: 1fr; layout: horizontal; padding: 1; }
+    #configuration {
+        width: 44; height: 1fr; margin-right: 1; padding: 0 1;
+        border: round $primary-muted; background: $surface;
+        border-title-color: $accent; border-title-style: bold;
+    }
+    #fields { height: auto; }
+    .form-row { height: 4; layout: vertical; }
+    .form-label { height: 1; width: 1fr; color: $text-muted; }
+    Input { width: 1fr; height: 3; border: tall $panel; background: $background; padding: 0 1; }
+    Input:focus { border: tall $accent; }
+    #prompt-row { height: 7; }
+    #additional-prompt {
+        width: 1fr; height: 6; padding: 0 1; border: round $panel;
+        background: $background; border-subtitle-color: $text-muted;
+    }
+    #additional-prompt:focus { border: round $accent; }
+    #additional-prompt .text-area--selection { background: $primary 30%; }
+    #additional-prompt .text-area--cursor { background: $accent; color: $background; }
+    Checkbox { width: 1fr; height: 3; padding: 0; border: none; background: $surface; }
+    Checkbox:focus { background: $panel; }
+    #preview-details {
+        height: 1fr; min-height: 6; padding: 0 1; margin-top: 1;
+        border-top: solid $primary-muted; overflow-y: auto; color: $text-muted;
+    }
+    #workbench { width: 1fr; height: 1fr; }
+    #actions { height: 3; overflow-y: hidden; }
+    Button { margin-right: 1; min-width: 8; height: 3; border: tall $panel; background: $panel; }
+    Button:hover { background: $primary-muted; }
+    Button:focus { text-style: bold; border: tall $accent; }
+    Button.-primary { background: $primary; color: $background; border: tall $primary; }
+    Button.-success { background: $success; color: $background; border: tall $success; }
+    Button.-error { background: $surface; color: $error; border: tall $surface; }
+    Button:disabled { background: $surface; color: $text-disabled; border: tall $surface; }
+    #status {
+        height: 3; padding: 0 1; margin-top: 1; border-left: thick $accent;
+        background: $surface; content-align: left middle; overflow-y: auto;
+    }
+    #metrics { height: 1; margin: 1 0; color: $text-muted; }
+    #context-status { height: 1; padding: 0 1; background: $surface; color: $text-muted; }
     #run-panels { height: 1fr; }
+    #run-document { display: none; }
     #timeline-panel { width: 3fr; height: 1fr; }
-    #summary-panel { display: none; width: 1fr; height: 1fr; border: round $accent; padding: 0 1; }
+    #summary-panel {
+        display: none; width: 1fr; min-width: 28; height: 1fr; margin-left: 1;
+        border: round $primary-muted; padding: 0 1; background: $surface;
+        border-title-color: $accent;
+    }
     #solve-summary { height: auto; }
     Screen.run-view #summary-panel { display: block; }
     Screen.summary-hidden #summary-panel { display: none; }
     #run-panels.narrow { layout: vertical; }
     #run-panels.narrow #timeline-panel { width: 1fr; height: 3fr; }
-    #run-panels.narrow #summary-panel { width: 1fr; height: 1fr; min-height: 6; }
-    #timeline { height: 1fr; min-height: 4; border: round $secondary; padding: 0 1; }
+    #run-panels.narrow #summary-panel { width: 1fr; height: 1fr; min-height: 6; margin: 1 0 0 0; }
+    #timeline {
+        height: 1fr; min-height: 4; border: round $primary-muted; padding: 0 1;
+        background: $surface; border-title-color: $accent; border-title-style: bold;
+    }
+    #timeline:focus { border: round $accent; }
     #follow-timeline { display: none; min-width: 25; }
     #follow-timeline.visible { display: block; }
-    Screen.run-view #fields { display: none; }
-    Screen.run-view #preview-details { display: none; }
+    Screen.run-view #configuration, Screen.run-view #fields { display: none; }
+    Screen.compact #body { layout: vertical; padding: 0 1; }
+    Screen.compact #configuration { width: 1fr; height: 10; margin: 0; border: none; padding: 0; }
+    Screen.compact.tall #configuration { height: 16; }
+    Screen.compact #fields { height: auto; }
+    Screen.compact .form-row { height: 2; layout: horizontal; }
+    Screen.compact .form-label { width: 24; height: 2; content-align: left middle; }
+    Screen.compact Input { height: 2; border: none; }
+    Screen.compact Checkbox { height: 2; }
+    Screen.compact #prompt-row { height: 4; }
+    Screen.compact #additional-prompt { height: 4; }
+    Screen.compact #preview-details { height: 4; min-height: 4; margin: 0; }
+    Screen.compact #status { margin-top: 0; height: 3; }
+    Screen.compact #metrics { margin: 0; }
     """
 
     def __init__(
@@ -92,6 +151,12 @@ class CTFBotApp(App[None]):
         imports_root: Path | None = None,
     ) -> None:
         super().__init__(ansi_color=True if "NO_COLOR" in os.environ else None)
+        self.register_theme(Theme(
+            name="flagcapturer", primary="#7dcfff", secondary="#bb9af7", accent="#7dcfff",
+            foreground="#c0caf5", background="#16161e", surface="#1a1b26", panel="#24283b",
+            success="#9ece6a", warning="#e0af68", error="#f7768e", dark=True,
+        ))
+        self.theme = "flagcapturer"
         self.service = service or (service_factory or create_codex_application_service)()
         self.runtime_image = runtime_image
         self._runtime_resolver = runtime_resolver
@@ -102,19 +167,24 @@ class CTFBotApp(App[None]):
         self.imports_root = imports_root or Path.cwd() / "data" / "imports"
         self._preview: ChallengePreview | None = None
         self._control: RunControl | None = None
-        self._event_queue: queue.SimpleQueue[tuple[str, Any]] = queue.SimpleQueue()
+        self._event_queue: queue.SimpleQueue[tuple[str | tuple[int, str], Any]] = queue.SimpleQueue()
         self._worker_thread: threading.Thread | None = None
         self._run_active = False
         self._quit_after_run = False
         self.last_result: RunResult | None = None
         self.last_report_path: Path | None = None
         self.candidate_status: str | None = None
+        self._candidates: dict[str, FlagCandidate] = {}
+        self._run_evidence_dir: Path | None = None
+        self._run_generation = 0
         self.displayed_events: list[str] = []
         self._timeline_state = TimelineState()
+        self._context_status = ContextStatus()
         self._timeline_dirty = False
         self._follow_timeline = True
         self._pending_timeline_events = 0
         self._run_started_at: float | None = None
+        self._run_elapsed_seconds = 0
         self._run_id = ""
         self._turn_count = 0
         self._tool_count = 0
@@ -125,49 +195,62 @@ class CTFBotApp(App[None]):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        with Vertical(id="body"):
-            with Vertical(id="fields"):
-                with Horizontal(classes="form-row"):
-                    yield Label("Challenge file / folder", classes="form-label")
-                    yield SafePathInput(placeholder="Single executable/attachment, or imported workspace directory", id="workspace-path")
-                with Horizontal(classes="form-row"):
-                    yield Label("File model transfer", classes="form-label")
-                    yield FileTransferCheckbox("未允许 / OFF：附件与工具输出不可发送给模型（点击允许）", id="file-model-transfer")
-                with Horizontal(classes="form-row"):
-                    yield Label("补充提示词（可选）", classes="form-label")
-                    yield SafePathInput(value=self.additional_prompt, placeholder="可填写解题线索、已知 flag 格式或其他提示", id="additional-prompt")
-                with Horizontal(classes="form-row"):
-                    yield Label("Runtime (automatic)", classes="form-label")
-                    yield SafePathInput(value=self.runtime_image,
-                                        placeholder="Selected automatically; optional pinned image override",
-                                        id="runtime-image")
-                with Horizontal(classes="form-row"):
-                    yield Label("Private run output", classes="form-label")
-                    yield SafePathInput(value=str(self.runs_root), id="runs-root")
-            with Horizontal(id="actions"):
-                yield Button("Preview", id="preview", variant="primary")
-                yield Button("Run", id="run", disabled=True, variant="success")
-                yield Button("Stop", id="stop", disabled=True, variant="error")
-                yield Button("Evidence", id="evidence", disabled=True)
-                yield Button("Report", id="report", disabled=True)
-                yield Button("Flag", id="candidates", disabled=True, tooltip="运行结束后选择候选 flag 并复制")
-                yield Button("Quit", id="quit")
-                yield Button("Log", id="toggle-layout", tooltip="F2：切换配置与大记录视图")
-            yield Static(self._as_text(self.status_text), id="status")
-            yield Static(Text("填写路径 → 按需勾选模型传输许可 → Preview 检查题目 → Run 开始。预览详情可滚动查看。"), id="preview-details")
-            with Horizontal(id="run-panels"):
-                with Vertical(id="timeline-panel"):
-                    yield Button("新记录 · 返回最新", id="follow-timeline", tooltip="恢复自动跟随最新记录")
-                    yield RichLog(id="timeline", wrap=True, markup=False, max_lines=2000)
-                with VerticalScroll(id="summary-panel"):
-                    yield Static(self._solving_summary.render(), id="solve-summary")
+        with Horizontal(id="body"):
+            with VerticalScroll(id="configuration"):
+                with Vertical(id="fields"):
+                    with Horizontal(classes="form-row"):
+                        yield Label("Challenge file / folder", classes="form-label")
+                        yield SafePathInput(placeholder="Single executable/attachment, or imported workspace directory", id="workspace-path")
+                    with Horizontal(classes="form-row"):
+                        yield Label("File model transfer", classes="form-label")
+                        yield FileTransferCheckbox("未允许 / OFF · 不发送附件与输出", id="file-model-transfer", tooltip="勾选允许该题附件与工具输出发送给配置的模型；点击可撤销。已有 workspace 的授权由其记录决定。")
+                    with Horizontal(classes="form-row", id="prompt-row"):
+                        yield Label("补充提示词（可选）", classes="form-label")
+                        yield SafePromptArea(self.additional_prompt, placeholder="解题线索、已知 flag 格式或其他提示…",
+                                             id="additional-prompt", soft_wrap=True, tab_behavior="focus",
+                                             highlight_cursor_line=False)
+                    with Horizontal(classes="form-row"):
+                        yield Label("Runtime (automatic)", classes="form-label")
+                        yield SafePathInput(value=self.runtime_image,
+                                            placeholder="Selected automatically; optional pinned image override",
+                                            id="runtime-image")
+                    with Horizontal(classes="form-row"):
+                        yield Label("Private run output", classes="form-label")
+                        yield SafePathInput(value=str(self.runs_root), id="runs-root")
+                yield Static(Text("选择题目附件，检查预览后开始解题。\n模型传输许可由你控制；运行证据保存在本地。"), id="preview-details")
+            with Vertical(id="workbench"):
+                with HorizontalScroll(id="actions"):
+                    yield Button("Preview", id="preview", variant="primary")
+                    yield Button("Run", id="run", disabled=True, variant="success")
+                    yield Button("Stop", id="stop", disabled=True, variant="error")
+                    yield Button("Log", id="toggle-layout", tooltip="F2：切换配置与大记录视图")
+                    yield Button("Evidence", id="evidence", disabled=True)
+                    yield Button("Report", id="report", disabled=True)
+                    yield Button("Writeup", id="writeup", disabled=True, tooltip="查看 agent 生成并保存的解题总结")
+                    yield Button("Flag", id="candidates", disabled=True, tooltip="运行中即可查看、选择和复制已提交的候选 Flag")
+                    yield Button("Quit", id="quit", tooltip="Ctrl+Q：退出")
+                yield Static(self._as_text(self.status_text), id="status")
+                yield Static(Text("IDLE  ·  轮次 0  ·  工具 0  ·  00:00"), id="metrics")
+                yield RunDocumentView(id="run-document")
+                with Horizontal(id="run-panels"):
+                    with Vertical(id="timeline-panel"):
+                        yield Button("查看最新", id="follow-timeline", tooltip="恢复自动跟随最新记录")
+                        yield HistoryLog(id="timeline", wrap=True, markup=False, max_lines=2000, auto_scroll=False)
+                    with VerticalScroll(id="summary-panel"):
+                        yield Static(self._solving_summary.render(), id="solve-summary")
+        yield Static(self._context_status.render(), id="context-status")
         yield Footer()
 
     def on_mount(self) -> None:
-        self.query_one("#run-panels").set_class(self.size.width < 110, "narrow")
-        self.query_one("#status", Static).border_title = "1. 状态与操作提示"
-        self.query_one("#preview-details", Static).border_title = "2. 题目预览 · 附件 / 授权 / 验证方式（可滚动）"
-        self.query_one("#timeline", RichLog).border_title = "3. 运行记录 · 每轮分析 → 工具 → 返回 · F2 展开配置"
+        self.query_one("#additional-prompt", TextArea).border_subtitle = "Enter 换行 · ^C / ^V"
+        self.query_one("#additional-prompt").tooltip = "Enter 换行；Tab 下一项；选中后 Ctrl+C 复制；Ctrl+V 粘贴系统剪贴板。终端原生粘贴也可使用。"
+        self.query_one("#context-status").tooltip = "Token 为本次运行累计用量（输入/输出）；上下文≈ 为最近推理的窗口占用估计。K=1,000，M=1,000,000。用量仅供参考，可随时 Stop。"
+        self._adapt_layout(self.size.width, self.size.height)
+        self.query_one("#configuration").border_title = "CHALLENGE / 题目配置"
+        self.query_one("#status", Static).border_title = "状态与操作提示"
+        self.query_one("#preview-details", Static).border_title = "题目预览"
+        self.query_one("#timeline", RichLog).border_title = "ACTIVITY / 运行记录"
+        self.query_one("#summary-panel").border_title = "INSIGHTS / 解题摘要"
         self.query_one("#timeline", RichLog).write(render_timeline(self._timeline_state))
         self.set_interval(0.05, self._drain_events)
         self.set_interval(1, self._refresh_run_status)
@@ -192,6 +275,15 @@ class CTFBotApp(App[None]):
             # Automatic resolution during Preview posts a delayed Changed
             # event. That value already belongs to the new preview.
             return
+        self._expire_preview()
+
+    def on_text_area_changed(self, event: TextArea.Changed) -> None:
+        if event.text_area.id != "additional-prompt" or self._preview is None or self._run_active:
+            return
+        if event.text_area.text != self._preview.additional_prompt:
+            self._expire_preview()
+
+    def _expire_preview(self) -> None:
         self._preview = None
         self.query_one("#run", Button).disabled = True
         self._set_preview("Inputs changed. Preview again before starting a run.")
@@ -211,6 +303,8 @@ class CTFBotApp(App[None]):
             self._show_candidates()
         elif action == "report":
             self._write_report()
+        elif action == "writeup":
+            self._show_writeup()
         elif action == "quit":
             self.action_request_quit()
         elif action == "toggle-layout":
@@ -220,10 +314,16 @@ class CTFBotApp(App[None]):
 
     def on_resize(self, event: Resize) -> None:
         if self.is_mounted:
-            self.query_one("#run-panels").set_class(event.size.width < 110, "narrow")
+            self._adapt_layout(event.size.width, event.size.height)
+
+    def _adapt_layout(self, width: int, height: int) -> None:
+        workbench_screen = self.query_one("#body").screen
+        workbench_screen.set_class(width < 120, "compact")
+        workbench_screen.set_class(height >= 30, "tall")
+        self.query_one("#run-panels").set_class(width < 110, "narrow")
 
     def action_toggle_summary(self) -> None:
-        self.screen.toggle_class("summary-hidden")
+        self.default_screen.toggle_class("summary-hidden")
 
     def _refresh_summary(self) -> None:
         self.query_one("#solve-summary", Static).update(self._solving_summary.render())
@@ -236,25 +336,32 @@ class CTFBotApp(App[None]):
         if getattr(event.widget, "id", None) == "timeline":
             self._pause_timeline_follow()
 
-    def on_mouse_scroll_down(self, event: MouseScrollDown) -> None:
-        widget = event.widget
-        if getattr(widget, "id", None) == "timeline" and widget.scroll_y >= widget.max_scroll_y - 1:
-            self._resume_timeline_follow()
+    def on_history_log_history_requested(self, event: HistoryLog.HistoryRequested) -> None:
+        if self.query_one("#timeline", HistoryLog).history_requested:
+            self._pause_timeline_follow()
+
+    def _refresh_context_status(self) -> None:
+        self.query_one("#context-status", Static).update(self._as_text(self._context_status.render()))
 
     def action_toggle_layout(self) -> None:
-        self.screen.toggle_class("run-view")
-        self.query_one("#toggle-layout", Button).label = "Config" if self.screen.has_class("run-view") else "Log"
+        if self.query_one("#run-document").display:
+            self._select_run_view("activity")
+            self._expand_log()
+            return
+        self.default_screen.toggle_class("run-view")
+        self.query_one("#toggle-layout", Button).label = "Config" if self.default_screen.has_class("run-view") else "Log"
 
     def _expand_log(self) -> None:
-        self.screen.add_class("run-view")
+        self._select_run_view("activity")
+        self.default_screen.add_class("run-view")
         self.query_one("#toggle-layout", Button).label = "Config"
         self.query_one("#timeline", RichLog).focus()
 
     def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
         if event.checkbox.id != "file-model-transfer":
             return
-        event.checkbox.label = ("已允许 / ON：附件与工具输出可发送给配置的模型（点击撤销）"
-                                if event.value else "未允许 / OFF：附件与工具输出不可发送给模型（点击允许）")
+        event.checkbox.label = ("已允许 / ON · 附件与输出可发送"
+                                if event.value else "未允许 / OFF · 不发送附件与输出")
         if self._preview is not None and not self._run_active:
             self._preview = None
             self.query_one("#run", Button).disabled = True
@@ -280,11 +387,13 @@ class CTFBotApp(App[None]):
     def _preview_challenge(self) -> None:
         if self._run_active:
             return
-        self.screen.remove_class("run-view")
+        self._select_run_view("activity")
+        self.default_screen.remove_class("run-view")
         self.query_one("#toggle-layout", Button).label = "Log"
         self.query_one("#run", Button).disabled = True
         self.query_one("#evidence", Button).disabled = True
         self.query_one("#report", Button).disabled = True
+        self.query_one("#writeup", Button).disabled = True
         try:
             workspace, image, runs_root = self._input_paths()
             attachment = select_single_attachment(workspace)
@@ -294,7 +403,7 @@ class CTFBotApp(App[None]):
                 workspace = import_single_file(attachment, self.imports_root,
                     authorize_model_data=self.query_one("#file-model-transfer", Checkbox).value)
             preview = self.service.preview(workspace, image, runs_root, self.limits,
-                                           additional_prompt=self.query_one("#additional-prompt", Input).value)
+                                           additional_prompt=self.query_one("#additional-prompt", TextArea).text)
         except Exception as exc:
             self._preview = None
             self._set_preview("Preview failed / 预览失败：" + safe_plain_text(str(exc)) +
@@ -304,17 +413,25 @@ class CTFBotApp(App[None]):
         self._preview = preview
         self.candidate_status = None
         self.last_result = None
-        self.query_one("#candidates", Button).disabled = True
+        self._candidates.clear()
+        self._run_evidence_dir = None
+        self._run_id = ""
+        self._run_generation += 1
+        self._sync_candidates()
         self.last_report_path = None
         self.displayed_events.clear()
         self._turn_count = 0
         self._tool_count = 0
         self._run_id = ""
         self._run_started_at = None
+        self._run_elapsed_seconds = 0
         self._reset_summary()
         self._timeline_state.clear()
+        self._context_status = ContextStatus()
+        self._refresh_context_status()
         self._timeline_dirty = False
         self._follow_timeline = True
+        self.query_one("#timeline", HistoryLog).history_requested = False
         self._pending_timeline_events = 0
         self.query_one("#follow-timeline", Button).remove_class("visible")
         self.query_one("#timeline", RichLog).clear()
@@ -341,8 +458,8 @@ class CTFBotApp(App[None]):
             f"Verifier: {safe_plain_text(preview.verifier)}",
             f"Runtime: {safe_plain_text(preview.runtime_profile)}",
             f"Image: {safe_plain_text(preview.runtime_image)}",
-            "Limits: " + ", ".join(
-                f"{key}={safe_plain_text('unlimited (count only)' if key == 'max_tool_calls' and value is None else value)}"
+            "Single-tool protections (no task quota): " + ", ".join(
+                f"{key}={safe_plain_text(value)}"
                 for key, value in asdict(preview.limits).items()
             ),
             "Inputs:",
@@ -350,7 +467,7 @@ class CTFBotApp(App[None]):
         if preview.service_endpoint:
             lines.insert(-1, f"Authorized endpoint: {safe_plain_text(preview.service_endpoint)}")
         if preview.additional_prompt.strip():
-            lines.insert(-1, f"补充提示词: {safe_plain_text(preview.additional_prompt)}")
+            lines.insert(-1, "补充提示词:\n" + "\n".join("  " + safe_plain_text(line) for line in preview.additional_prompt.split("\n")))
         if preview.memory_policy:
             policy = preview.memory_policy
             lines.insert(-1, f"Memory: {safe_plain_text(policy['mode'])}; namespaces {safe_plain_text(', '.join(policy['namespaces']) or 'none')}; {len(policy['versions'])} reviewed versions")
@@ -380,12 +497,18 @@ class CTFBotApp(App[None]):
         workspace = Path(self._preview.workspace)
 
         self._run_active = True
+        self._context_status = ContextStatus()
+        self._refresh_context_status()
         self._reset_summary()
         self._expand_log()
         self._control = RunControl()
         self.candidate_status = None
         self.last_result = None
-        self.query_one("#candidates", Button).disabled = True
+        self._candidates.clear()
+        self._run_evidence_dir = None
+        self._run_id = ""
+        self._run_generation += 1
+        self._sync_candidates()
         self.last_report_path = None
         self._turn_count = 0
         self._tool_count = 0
@@ -394,9 +517,11 @@ class CTFBotApp(App[None]):
         self.query_one("#stop", Button).disabled = False
         self.query_one("#evidence", Button).disabled = True
         self.query_one("#report", Button).disabled = True
+        self.query_one("#writeup", Button).disabled = True
         self._set_status("Run starting. Model and runtime will be created after preflight succeeds.")
         control = self._control
         additional_prompt = self._preview.additional_prompt
+        generation = self._run_generation
 
         def work() -> None:
             evidence_dir: Path | None = None
@@ -411,7 +536,7 @@ class CTFBotApp(App[None]):
                         pass
                     else:
                         evidence_dir = Path(runs_root).absolute() / canonical_run_id
-                self._event_queue.put(("event", (record, evidence_dir)))
+                self._event_queue.put(((generation, "event"), (record, evidence_dir)))
 
             try:
                 result = self.service.run(
@@ -424,9 +549,9 @@ class CTFBotApp(App[None]):
                     additional_prompt=additional_prompt,
                 )
             except Exception as exc:
-                self._event_queue.put(("error", exc))
+                self._event_queue.put(((generation, "error"), exc))
             else:
-                self._event_queue.put(("result", result))
+                self._event_queue.put(((generation, "result"), result))
 
         self._worker_thread = threading.Thread(
             target=work,
@@ -441,6 +566,10 @@ class CTFBotApp(App[None]):
                 kind, payload = self._event_queue.get_nowait()
             except queue.Empty:
                 break
+            if isinstance(kind, tuple):
+                generation, kind = kind
+                if generation != self._run_generation:
+                    continue
             if kind == "runtime_image":
                 self._runtime_lookup_active = False
                 field = self.query_one("#runtime-image", Input)
@@ -460,18 +589,31 @@ class CTFBotApp(App[None]):
             self._timeline_dirty = False
             self._refresh_timeline()
 
+    def _freeze_elapsed(self) -> None:
+        if self._run_started_at is not None:
+            self._run_elapsed_seconds = int(time.monotonic() - self._run_started_at)
+
     def _finish_run(self, result: RunResult) -> None:
+        self._freeze_elapsed()
         self.last_result = result
+        self._run_id = result.run_id
+        self._run_evidence_dir = Path(result.run_dir)
         self._run_active = False
         self._control = None
+        if self.last_result is not None:
+            self._context_status.update_usage(self.last_result.usage_totals)
+            self._refresh_context_status()
         self.query_one("#preview", Button).disabled = False
         self.query_one("#stop", Button).disabled = True
         self.query_one("#evidence", Button).disabled = False
         self.query_one("#report", Button).disabled = False
-        self.query_one("#candidates", Button).disabled = False
+        self._sync_candidates()
         self.query_one("#run", Button).disabled = True
-        if result.status == "candidate_unverified":
-            message = f"已结束，保留未验证候选；correctness is unverified。Evidence: {result.run_dir}"
+        self.query_one("#writeup", Button).disabled = not (Path(result.run_dir) / "writeup.md").is_file()
+        if result.status in {"completed", "candidate_unverified"}:
+            message = f"任务已完成，Flag 已提交，无需等待平台验证。记录：{result.run_dir}"
+        elif result.status == "partial":
+            message = f"已提交部分 Flag，仍有实际子任务未完成。记录：{result.run_dir}"
         elif result.status == "unsolved":
             message = f"本次尝试未解出，未声称题目无解。Evidence: {result.run_dir}"
         elif result.status == "user_cancelled":
@@ -488,6 +630,7 @@ class CTFBotApp(App[None]):
             self.exit()
 
     def _finish_error(self, error: Exception) -> None:
+        self._freeze_elapsed()
         self._run_active = False
         self._control = None
         self.query_one("#preview", Button).disabled = False
@@ -495,6 +638,8 @@ class CTFBotApp(App[None]):
         self.query_one("#run", Button).disabled = self._preview is None or not self._preview.start_allowed
         self.query_one("#evidence", Button).disabled = self.last_result is None
         self.query_one("#report", Button).disabled = self.last_result is None
+        self.query_one("#writeup", Button).disabled = self.last_result is None or not (Path(self.last_result.run_dir) / "writeup.md").is_file()
+        self._sync_candidates()
         self._solving_summary.outcome = "运行错误"
         self._refresh_summary()
         error_type = safe_plain_text(type(error).__name__)
@@ -505,9 +650,17 @@ class CTFBotApp(App[None]):
 
     def _render_event(self, event: dict[str, Any], *, evidence_dir: Path | None = None) -> None:
         event_type = event.get("event_type", "unknown")
+        event_run_id = event.get("run_id")
+        if isinstance(event_run_id, str):
+            if self._run_id and event_run_id != self._run_id:
+                return  # Ignore late events from another run, including candidates.
+            self._run_id = event_run_id
+            if evidence_dir is not None:
+                self._run_evidence_dir = evidence_dir
         if event_type == "run_started":
             self._run_id = str(event.get("run_id", ""))
-            self._run_started_at = time.monotonic()
+            if self._run_active:
+                self._run_started_at = time.monotonic()
         elif event_type == "model_turn_started":
             self._turn_count = int(event.get("turn", self._turn_count + 1))
             self._turn_has_message = False
@@ -517,12 +670,39 @@ class CTFBotApp(App[None]):
             self._tool_count = int(event.get("tool_index", self._tool_count + 1))
         elif event_type == "tool_result" and event.get("name") == "candidate_submit":
             result = event.get("result")
-            if isinstance(result, dict):
-                self.candidate_status = str(result.get("status", "candidate"))
+            if isinstance(result, dict) and result.get("status") == "unverified":
+                self.candidate_status = "unverified"
+
+        if event_type in {"provider_initialized", "run_metadata"} and isinstance(event.get("provider"), dict):
+            metadata = event["provider"]
+            self._context_status.provider = str(metadata.get("provider") or "")
+            self._context_status.model = str(metadata.get("model") or "")
+            self._refresh_context_status()
+        elif event_type == "provider_context_usage":
+            self._context_status.update(event)
+            self._refresh_context_status()
+        elif event_type == "context_compaction_completed":
+            self._context_status.update({"usage": event.get("used"), "capacity": event.get("capacity"), "estimated": True})
+            self._refresh_context_status()
+        elif event_type in {"provider_compaction_started", "provider_compaction_completed", "context_compaction_started"}:
+            self._context_status.used = None
+            self._context_status.compacting = event_type in {"provider_compaction_started", "context_compaction_started"}
+            self._refresh_context_status()
+        elif event_type == "model_turn_completed":
+            self._context_status.update_usage(event.get("usage_totals"))
+            self._refresh_context_status()
+        elif event_type == "run_finished":
+            if isinstance(event.get("provider_context"), dict):
+                self._context_status.update(event["provider_context"])
+            self._context_status.update_usage(event.get("provider_billing_usage"), provider=True)
+            self._context_status.update_usage(event.get("usage_totals"))
+            self._refresh_context_status()
 
         reader = lambda ref: self._read_artifact(ref, evidence_dir, limit=256 * 1024)
         candidate_value = (self._read_candidate_value(event, evidence_dir)
                            if event_type == "tool_result" and event.get("name") == "candidate_submit" else None)
+        if candidate_value is not None:
+            self._record_candidate(event, candidate_value)
         if event_type == "assistant_message" or (
             event_type == "tool_result" and event.get("name") not in {"summary_update", "claim_record", "experiment_record", "run_complete"}
         ):
@@ -568,38 +748,57 @@ class CTFBotApp(App[None]):
             else:
                 result = event.get("result") if isinstance(event.get("result"), dict) else {}
                 status = safe_plain_text(str(result.get("status", "unverified")))
-                line += f" — flag candidate ({status}): {safe_plain_text(candidate)}"
+                line += f" — Flag 已提交：{safe_plain_text(candidate)}"
         if line is not None:
             self.displayed_events.append(line)
         if self._run_active and event_type not in {"run_finished", "run_cancelled"}:
             self._refresh_run_status()
         if event_type in {"run_finished", "run_cancelled", "run_failed"}:
+            if self._run_active:
+                self._freeze_elapsed()
             self._run_started_at = None
 
     def _refresh_timeline(self) -> None:
-        log = self.query_one("#timeline", RichLog)
+        log = self.query_one("#timeline", HistoryLog)
+        # A scrollbar drag or key press may precede the queued HistoryRequested.
+        if log.history_requested:
+            self._pause_timeline_follow()
         previous_y = log.scroll_y
+        log.rebuilding = True
         log.clear()
-        log.write(render_timeline(self._timeline_state), scroll_end=self._follow_timeline)
-        if self._follow_timeline:
-            log.scroll_end(animate=False)
-        else:
+        log.write(render_timeline(self._timeline_state), scroll_end=False)
+        if not self._follow_timeline:
             self._pending_timeline_events += 1
-            log.scroll_to(y=min(previous_y, log.max_scroll_y), animate=False, immediate=True)
             button = self.query_one("#follow-timeline", Button)
-            button.label = "有新动态 · 返回最新"
+            button.label = "有新动态 · 查看最新"
             button.add_class("visible")
 
+        def restore_position() -> None:
+            # Layout must finish before clamping to the new scroll extent.
+            if self._follow_timeline:
+                log.scroll_end(animate=False, immediate=True)
+            else:
+                log.scroll_to(y=previous_y, animate=False, immediate=True)
+            log.rebuilding = False
+
+        self.call_after_refresh(restore_position)
+
     def _pause_timeline_follow(self) -> None:
+        if not self._follow_timeline:
+            return
         self._follow_timeline = False
+        button = self.query_one("#follow-timeline", Button)
+        button.label = "查看最新"
+        button.add_class("visible")
 
     def _resume_timeline_follow(self) -> None:
         self._follow_timeline = True
         self._pending_timeline_events = 0
         button = self.query_one("#follow-timeline", Button)
         button.remove_class("visible")
-        log = self.query_one("#timeline", RichLog)
-        log.scroll_end(animate=False)
+        log = self.query_one("#timeline", HistoryLog)
+        log.history_requested = False
+        log.scroll_end(animate=False, immediate=True)
 
     def _refresh_run_status(self) -> None:
         if not self._run_active:
@@ -607,7 +806,7 @@ class CTFBotApp(App[None]):
         elapsed = int(time.monotonic() - self._run_started_at) if self._run_started_at is not None else 0
         run_id = f" · Run {self._run_id[:8]}" if self._run_id else ""
         candidate = f" · 候选 {self.candidate_status}" if self.candidate_status else ""
-        self._set_status(f"运行中{run_id} · 第 {self._turn_count}/{self.limits.max_turns} 轮 · "
+        self._set_status(f"运行中{run_id} · 第 {self._turn_count} 轮 · "
                          f"工具调用 {self._tool_count} 次 · 已运行 {elapsed//60:02d}:{elapsed%60:02d}{candidate}")
 
     def _event_summary(self, event: dict[str, Any]) -> str:
@@ -743,61 +942,78 @@ class CTFBotApp(App[None]):
         except (OSError, UnicodeError, ValueError):
             return None
 
+    def _record_candidate(self, event: dict[str, Any], value: str, *, notify: bool = True) -> None:
+        result = event.get("result", {})
+        if not isinstance(result, dict) or result.get("status") != "unverified":
+            return
+        cid = str(result.get("candidate_id") or f"candidate-{len(self._candidates) + 1}")
+        if cid in self._candidates:
+            return
+        candidate = FlagCandidate(cid, value, str(result.get("status", "unverified")), str(result.get("subtask") or ""))
+        self._candidates[cid] = candidate
+        self._sync_candidates()
+        if notify and self._run_active:
+            label = safe_plain_text(candidate.subtask) or "未标注子题"
+            self.notify(f"Flag 已提交：{label} · {safe_plain_text(cid)}，对应目标已完成", timeout=3, markup=False)
+
+    def _sync_candidates(self) -> None:
+        button = self.query_one("#candidates", Button)
+        button.label = f"Flag · {len(self._candidates)}" if self._run_active or self._candidates else "Flag"
+        button.disabled = not (self._run_active or self.last_result is not None or self._candidates)
+        for screen in self.screen_stack:
+            if isinstance(screen, CandidateScreen) and screen.is_mounted:
+                screen.update_candidates(tuple(self._candidates.values()), running=self._run_active)
+
     def _show_candidates(self) -> None:
-        if self._run_active or self.last_result is None:
+        if isinstance(self.screen, CandidateScreen):
             return
-        run_dir = Path(self.last_result.run_dir)
-        candidates: list[FlagCandidate] = []
-        try:
-            with (run_dir / "events.jsonl").open(encoding="utf-8") as stream:
-                for line in stream:
-                    if not line.strip():
-                        continue
-                    event = json.loads(line)
-                    if not isinstance(event, dict) or event.get("event_type") != "tool_result" or event.get("name") != "candidate_submit":
-                        continue
-                    value = self._read_candidate_value(event, run_dir)
-                    if value is None:
-                        continue
-                    result = event["result"]
-                    candidates.append(FlagCandidate(
-                        str(result.get("candidate_id", f"candidate-{len(candidates) + 1}")),
-                        value, str(result.get("status", "unverified")),
-                    ))
-        except (OSError, ValueError) as exc:
-            self._set_status(f"候选读取失败：{safe_plain_text(str(exc))}")
+        if not (self._run_active or self.last_result is not None or self._candidates):
             return
-        self.push_screen(CandidateScreen(tuple(candidates)))
+        if not self._run_active and self.last_result is not None:
+            # Re-read historical artifacts to preserve integrity checks even on reopen.
+            run_dir = Path(self.last_result.run_dir)
+            self._candidates.clear()
+            try:
+                with (run_dir / "events.jsonl").open(encoding="utf-8") as stream:
+                    for line in stream:
+                        if not line.strip():
+                            continue
+                        event = json.loads(line)
+                        if (not isinstance(event, dict) or event.get("event_type") != "tool_result"
+                                or event.get("name") != "candidate_submit"
+                                or event.get("run_id", self.last_result.run_id) != self.last_result.run_id):
+                            continue
+                        value = self._read_candidate_value(event, run_dir)
+                        if value is not None:
+                            self._record_candidate(event, value, notify=False)
+            except (OSError, ValueError) as exc:
+                self._set_status(f"候选读取失败：{safe_plain_text(str(exc))}")
+            self._sync_candidates()
+        self.push_screen(CandidateScreen(tuple(self._candidates.values()), running=self._run_active))
+        # An event may arrive between push_screen and the modal mounting.
+        self.call_after_refresh(self._sync_candidates)
+
+    def _select_run_view(self, view: str) -> None:
+        self.query_one("#run-panels").display = view == "activity"
+        self.query_one("#run-document").display = view != "activity"
+        for button_id in ("evidence", "report", "writeup"):
+            self.query_one(f"#{button_id}", Button).variant = "primary" if view == button_id else "default"
+        if view != "activity":
+            self.default_screen.add_class("run-view")
+            self.query_one("#toggle-layout", Button).label = "Log"
 
     def _show_evidence(self) -> None:
         if self.last_result is None:
             self._set_status("Evidence is available after the run finishes.")
             return
+        path = Path(self.last_result.run_dir) / "events.jsonl"
         try:
-            events_path = Path(self.last_result.run_dir) / "events.jsonl"
-            events = [json.loads(line) for line in events_path.read_text(encoding="utf-8").splitlines() if line]
-        except (OSError, json.JSONDecodeError) as exc:
+            self.query_one("#run-document", RunDocumentView).show_evidence(path)
+        except (OSError, UnicodeError) as exc:
             self._set_status(f"Evidence read error: {safe_plain_text(str(exc))}")
             return
-        self.displayed_events.clear()
-        self._turn_count = self._tool_count = 0
-        self._turn_has_message = False
-        self._reset_summary()
-        self._timeline_state.clear()
-        self._timeline_dirty = False
-        self._follow_timeline = True
-        self._pending_timeline_events = 0
-        self.query_one("#follow-timeline", Button).remove_class("visible")
-        self._expand_log()
-        log = self.query_one("#timeline", RichLog)
-        log.clear()
-        for event in events:
-            if isinstance(event, dict):
-                self._render_event(event, evidence_dir=Path(self.last_result.run_dir))
-        if self._timeline_dirty:
-            self._timeline_dirty = False
-            self._refresh_timeline()
-        self._set_status(f"精简回看：分析 / 工具 / 返回。完整 events.jsonl 与 artifacts 保存在 {self.last_result.run_dir}")
+        self._select_run_view("evidence")
+        self._set_status("正在查看 events.jsonl：JSON 格式化与高亮；上一页 / 下一页翻阅，Log 返回运行记录。")
 
     def _write_report(self) -> None:
         if self.last_result is None:
@@ -805,10 +1021,25 @@ class CTFBotApp(App[None]):
             return
         try:
             self.last_report_path = generate_basic_report(Path(self.last_result.run_dir))
+            self.query_one("#run-document", RunDocumentView).show_report(self.last_report_path)
         except (OSError, ValueError) as exc:
             self._set_status(f"Report error: {safe_plain_text(str(exc))}")
             return
-        self._set_status(f"Basic report written to {safe_plain_text(str(self.last_report_path))}")
+        self._select_run_view("report")
+        self._set_status(f"正在查看 Markdown 报告：{self.last_report_path}；Log 返回运行记录。")
+
+    def _show_writeup(self) -> None:
+        if self.last_result is None:
+            self._set_status("任务完成后可查看 Writeup。")
+            return
+        path = Path(self.last_result.run_dir) / "writeup.md"
+        try:
+            self.query_one("#run-document", RunDocumentView).show_report(path, title="WRITEUP / 解题总结")
+        except (OSError, UnicodeError) as exc:
+            self._set_status(f"Writeup 读取失败：{safe_plain_text(exc)}")
+            return
+        self._select_run_view("writeup")
+        self._set_status(f"正在查看 agent 解题总结：{path}；Log 返回运行记录。")
 
     def _input_paths(self) -> tuple[Path, str, Path]:
         workspace = self.query_one("#workspace-path", Input).value.strip()
@@ -833,6 +1064,20 @@ class CTFBotApp(App[None]):
     def _set_status(self, value: str) -> None:
         self.status_text = safe_plain_text(value)
         self.query_one("#status", Static).update(self._as_text(self.status_text))
+        elapsed = int(time.monotonic() - self._run_started_at) if self._run_started_at is not None else 0
+        if self._run_active:
+            phase = "RUNNING"
+        elif self.last_result:
+            phase = "FINISHED"
+        elif self._preview and self._preview.start_allowed:
+            phase = "READY"
+        else:
+            phase = "IDLE"
+        if not self._run_active:
+            elapsed = self._run_elapsed_seconds
+        metrics = Text(f"{phase}  ", style="bold cyan" if self._run_active else "bold")
+        metrics.append(f"·  轮次 {self._turn_count}  ·  工具 {self._tool_count}  ·  {elapsed//60:02d}:{elapsed%60:02d}", style="dim")
+        self.query_one("#metrics", Static).update(metrics)
 
     @staticmethod
     def _as_text(value: str) -> Text:

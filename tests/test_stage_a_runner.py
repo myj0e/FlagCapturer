@@ -285,7 +285,7 @@ class BaselineInputExposureTests(unittest.TestCase):
                 ToolCall("command_run", {"argv": ["cat", "/challenge/../TASK.md"]}),
                 ToolCall("command_run", {"argv": ["cat", "/challenge/../../private/private_data.json"]}),
                 ToolCall("candidate_submit", {"candidate": "CTFBOT_SYNTHETIC{candidate}"}),
-                ToolCall("run_complete", {"outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Retain candidate", "unresolved": []}),
+                ToolCall("run_complete", {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', "outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Retain candidate", "unresolved": []}),
             )),))
             image = "sha256:" + "a" * 64
             with patch("ctfbot.application.baseline.DockerRuntime", CapturingRuntime):
@@ -295,7 +295,7 @@ class BaselineInputExposureTests(unittest.TestCase):
                     runs_root=root / "runs",
                     model=model,
                     model_metadata={"provider": "fake"},
-                    limits=RunLimits(max_turns=1, max_tool_calls=12),
+                    limits=RunLimits(),
                 )
 
             self.assertEqual(result.status, "candidate_unverified")
@@ -443,11 +443,11 @@ class OfflineAcceptanceTests(unittest.TestCase):
             runtime = CountingRuntime()
             model = FakeModelSession((ScriptedTurn(tool_calls=(
                 ToolCall("candidate_submit", {"candidate": "CTFBOT_SYNTHETIC{valid}"}),
-                    ToolCall("run_complete", {"outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Retain candidate", "unresolved": []}),
+                    ToolCall("run_complete", {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', "outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Retain candidate", "unresolved": []}),
                 ToolCall("command_run", {"argv": ["touch", "should-not-run"]}),
             )),))
             registry = ToolRegistry(challenge, work, evidence, runtime)
-            result = AgentLoop(model, registry, evidence, limits=RunLimits(max_turns=2)).run("synthetic task")
+            result = AgentLoop(model, registry, evidence, limits=RunLimits()).run("synthetic task")
             self.assertEqual(result.status, "candidate_unverified")
             self.assertEqual(runtime.calls, [])
             events = [json.loads(line) for line in (root / "run" / "events.jsonl").read_text().splitlines()]

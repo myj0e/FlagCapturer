@@ -81,12 +81,12 @@ def test_dashboard_live_replay_toggle_resize_and_invalid_artifact(tmp_path: Path
     model = FakeModelSession([
         ScriptedTurn(text='先检查参数', tool_calls=(ToolCall('summary_update', snapshot()),)),
         ScriptedTurn(text='需要更换方法', tool_calls=(ToolCall('summary_update', second),)),
-        ScriptedTurn(tool_calls=(ToolCall('run_complete', {'outcome': 'unsolved', 'summary': '缺少进一步依据', 'unresolved': ['编码类型']}),)),
+        ScriptedTurn(tool_calls=(ToolCall('run_complete', {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', 'outcome': 'unsolved', 'summary': '缺少进一步依据', 'unresolved': ['编码类型']}),)),
     ])
 
     async def scenario():
         app = CTFBotApp(service=make_service(lambda: model), runtime_image=IMAGE,
-                       runs_root=tmp_path/'runs', limits=RunLimits(max_turns=3))
+                       runs_root=tmp_path/'runs', limits=RunLimits())
         async with app.run_test(size=(160, 50)) as pilot:
             fill_fields(app, workspace, tmp_path/'runs')
             await pilot.click('#preview')
@@ -149,7 +149,7 @@ def test_multiple_public_explanations_in_one_provider_turn_refresh_dashboard(tmp
             self.message('更正方案')
             reply = on_tool_call(ToolCall('summary_update', snapshot('更正目标')))
             assert json.loads(reply.content)['revision'] == 2
-            on_tool_call(ToolCall('run_complete', {'outcome': 'unsolved', 'summary': '尚缺证据', 'unresolved': []}))
+            on_tool_call(ToolCall('run_complete', {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', 'outcome': 'unsolved', 'summary': '尚缺证据', 'unresolved': []}))
             return TurnResult(text='', tool_calls=3)
 
         def close(self):

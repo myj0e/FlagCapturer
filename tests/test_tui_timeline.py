@@ -75,7 +75,7 @@ def test_rounds_show_public_analysis_tool_arguments_and_returns_with_expanded_lo
             on_tool_call(ToolCall('command_run', {'argv': ['file', '/challenge/cipher.bin']})) if self.index == 1 else \
                 on_tool_call(ToolCall('candidate_submit', {'candidate': CANDIDATE}))
             if self.index == 2:
-                on_tool_call(ToolCall('run_complete', {'outcome': 'candidate_unverified', 'candidate_id': 'candidate-1', 'summary': 'Retain candidate', 'unresolved': []}))
+                on_tool_call(ToolCall('run_complete', {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', 'outcome': 'candidate_unverified', 'candidate_id': 'candidate-1', 'summary': 'Retain candidate', 'unresolved': []}))
             return TurnResult(text=text, tool_calls=1)
         def close(self):
             pass
@@ -86,7 +86,7 @@ def test_rounds_show_public_analysis_tool_arguments_and_returns_with_expanded_lo
 
     async def scenario():
         app = CTFBotApp(service=make_service(ObservedModel, OutputRuntime), runtime_image=IMAGE,
-                        runs_root=tmp_path/'runs', limits=RunLimits(max_turns=2))
+                        runs_root=tmp_path/'runs', limits=RunLimits())
         async with app.run_test(size=(100, 36)) as pilot:
             app.query_one('#workspace-path', Input).value = str(workspace)
             await pilot.click('#preview')
@@ -114,8 +114,18 @@ def test_rounds_show_public_analysis_tool_arguments_and_returns_with_expanded_lo
             assert app.displayed_events == live
             await pilot.press('f2')
             await pilot.pause(.1)
+            assert app.query_one('#run-panels').display
+            assert not app.query_one('#run-document').display
+            assert app.displayed_events == live
+            await pilot.press('f2')
+            await pilot.pause(.1)
             assert app.query_one('#fields').display
             assert app.query_one('#timeline').size.height == small_height
+            await pilot.resize_terminal(80, 24)
+            await pilot.pause()
+            assert not app.screen.has_class('tall')
+            assert app.query_one('#timeline').region.bottom <= 23
+            assert app.query_one('#actions').region.bottom < app.query_one('#timeline').region.y
     asyncio.run(scenario())
 
 
@@ -128,4 +138,70 @@ def test_runtime_tool_count_has_no_limit_denominator(tmp_path):
             assert '工具调用 72 次' in app.status_text
             assert '工具调用 72/' not in app.status_text
             app._run_active = False
+    asyncio.run(scenario())
+
+
+def test_reading_history_stays_paused_for_keyboard_scrollbar_and_new_events(tmp_path):
+    from textual.widgets import Button
+    from ctfbot.tui.history_log import HistoryLog
+
+    async def scenario():
+        app = CTFBotApp(service=make_service(lambda: FakeModelSession([])), runtime_image=IMAGE, runs_root=tmp_path/'runs')
+        async with app.run_test(size=(120, 40)) as pilot:
+            app._expand_log()
+            for turn in range(1, 25):
+                app._timeline_state.add({'event_type':'model_turn_started', 'turn':turn}, lambda ref: ref)
+                app._timeline_state.add({'event_type':'assistant_message', 'evidence':f'Public message {turn}'}, lambda ref: ref)
+            app._refresh_timeline()
+            await pilot.pause()
+            log = app.query_one('#timeline', HistoryLog)
+            assert log.max_scroll_y > 20 and log.scroll_y == log.max_scroll_y
+            await pilot.press('pageup')
+            await pilot.pause()
+            assert not app._follow_timeline
+            assert app.query_one('#follow-timeline', Button).has_class('visible')
+            position = log.scroll_y
+            app._timeline_state.add({'event_type':'model_turn_started', 'turn':25}, lambda ref: ref)
+            app._refresh_timeline()
+            await pilot.pause()
+            assert log.scroll_y == position and not app._follow_timeline
+            await pilot.press('end')
+            await pilot.pause()
+            assert not app._follow_timeline  # Reaching the bottom does not resume.
+            await pilot.click('#follow-timeline')
+            await pilot.pause()
+            assert app._follow_timeline and log.scroll_y == log.max_scroll_y
+            # This is also how scrollbar dragging updates the viewport.
+            log.scroll_to(y=3, animate=False, immediate=True)
+            await pilot.pause()
+            assert not app._follow_timeline
+            app._refresh_timeline()
+            await pilot.pause()
+            assert log.scroll_y == 3
+    asyncio.run(scenario())
+
+
+def test_context_updates_statusline_without_filling_history(tmp_path):
+    from textual.widgets import Static
+
+    async def scenario():
+        app = CTFBotApp(service=make_service(lambda: FakeModelSession([])), runtime_image=IMAGE, runs_root=tmp_path/'runs')
+        async with app.run_test(size=(100, 36)):
+            app._render_event({'event_type':'provider_initialized', 'provider':{'provider':'codex', 'model':'test-model'}})
+            app._render_event({'event_type':'provider_context_usage', 'capacity':200000,
+                               'last_inference_usage':{'inputTokens':12000, 'outputTokens':700},
+                               'cumulative_usage':{'totalTokens':900000}})
+            status = app._context_status.render()
+            assert '12.7K / 200K' in status and '≈' in status and 'test-model' in status
+            assert 'Token 900K' in status
+            assert not app._timeline_state.notices
+            assert not any('provider' in line for line in app.displayed_events)
+            assert app.query_one('#context-status', Static).region.y > app.query_one('#timeline').region.y
+            app._render_event({'event_type':'provider_compaction_started'})
+            assert '压缩中' in app._context_status.render()
+            app._render_event({'event_type':'provider_compaction_completed'})
+            assert '等待用量' in app._context_status.render()
+            app._render_event({'event_type':'provider_context_usage', 'capacity':200000,
+                               'last_inference_usage':{'totalTokens':6000}})
+            assert '6K / 200K' in app._context_status.render()
     asyncio.run(scenario())

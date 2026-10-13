@@ -109,7 +109,7 @@ class ReliabilityTools:
                 raise ValueError("check belongs to different candidate bytes")
             cid = f"candidate-{len(self.candidates)+1}"
             record = {**self.registry.record_candidate(args["candidate"]), "contract_version": CONTRACT_VERSION,
-                      "candidate_id": cid, "candidate_sha256": digest,
+                      "candidate_id": cid, "candidate_sha256": digest, "subtask": args.get("subtask", ""),
                       "observation_ids": sources, "check_ids": checks,
                       "derivation": args.get("derivation", ""),
                       "unchecked_reason": args.get("unchecked_reason", "No provenance/check supplied."),
@@ -117,22 +117,28 @@ class ReliabilityTools:
             self.candidates[cid] = record
             details = self.registry.evidence.write_artifact(json.dumps(record).encode(), media_type="application/json")
             self.registry.evidence.append("candidate_recorded", candidate_id=cid, status=record["status"],
-                                          verified=record["verified"], details=details)
+                                          verified=record["verified"], subtask=record["subtask"], details=details)
             payload = {key: value for key, value in record.items()
                        if key not in {"candidate_evidence", "derivation"}}
             payload["ends_run"] = False
-            return ToolOutcome(ToolReply(json.dumps(payload)), {**record, "ends_run": False})
+            payload["subtask_completed"] = True
+            payload["platform_verification_required"] = False
+            payload["next_step"] = "This flag's objective is complete. Continue only remaining requested subtasks; otherwise write the Markdown writeup and call run_complete. Never wait for platform acceptance."
+            return ToolOutcome(ToolReply(json.dumps(payload)), {**record, "ends_run": False, "subtask_completed": True,
+                                                               "platform_verification_required": False})
 
-        self.define("candidate_submit", "Record a candidate and its provenance; any model-selected flag is accepted without a format check; submission does NOT prove correctness or end the run. Supply observations, derivation and checks, or unchecked_reason. Use run_complete to explicitly finish with an unverified candidate.", {
-            "candidate": string(4096), "observation_ids": refs(), "check_ids": refs(),
+        self.define("candidate_submit", "Submit a flag and complete its requested objective; preserve exact original characters and prefix. No platform acceptance, correctness confirmation or validation feedback is required or pending. Sources/checks are optional provenance, not completion prerequisites. For multiple requested subtasks, submit each result immediately and continue only the remaining requested work. If all requested flags are submitted, stop solving, author the Markdown writeup and call run_complete(outcome='completed', writeup=..., unresolved=[]). Submission does not close the run before writeup is saved. Optionally label subtask.", {
+            "candidate": string(4096), "subtask": string(160), "observation_ids": refs(), "check_ids": refs(),
             "derivation": string(), "unchecked_reason": string(),
         }, ["candidate"], submit)
         self.define("summary_update", "Replace the complete PUBLIC solving dashboard after important results or a change of direction, once per meaningful progress step; repeated updates need new public explanation or tool results. Keep facts separate from hypotheses. Facts are model-reported, never controller proof; attach observation_ids when available. Explicitly list corrections when retracting earlier conclusions. Use concise text in the user's language; never provide private reasoning. This only updates display/evidence, not verification or completion.", SUMMARY_PROPERTIES, ["goal", "facts", "hypotheses", "approach", "next_steps", "blockers", "corrections"], self.update_summary)
-        self.define("run_complete", "Explicitly end this attempt as unsolved or candidate_unverified. No flag is required for unsolved. Explain remaining unknowns; this is the model's conclusion, not proof of impossibility. A candidate must reference a candidate_id from this run.", {
-            "outcome": string(enum=["unsolved", "candidate_unverified"]),
+        self.define("run_complete", "Finish after submitting all requested flags and authoring a Markdown writeup. Use completed with submitted candidate_ids and unresolved=[]; platform acceptance/verification is never a remaining task. Use partial only for actual unfinished requested subtasks with retained flags, or unsolved when no flags were obtained. candidate_unverified is a legacy outcome alias. Mandatory writeup: concise public, reproducible solution in the user's language, task overview, key observations with source IDs, actual steps/commands/code and submitted flags; describe actual unsolved parts only. Never include private reasoning or invent successful steps. The controller saves writeup.md in this run directory before ending. No extra tools are admitted after completion.", {
+            "outcome": string(enum=["completed", "partial", "unsolved", "candidate_unverified"]),
             "summary": string(), "unresolved": text_list(), "candidate_id": string(80),
+            "writeup": string(12288, minLength=1),
+            "candidate_ids": {"type": "array", "items": string(80)},
             "observation_ids": refs(),
-        }, ["outcome", "summary", "unresolved"], self.complete)
+        }, ["outcome", "summary", "unresolved", "writeup"], self.complete)
         self.define("artifact_read", "Read a bounded byte range from this run's hash-verified evidence, including saved full tool output. Offsets/lengths are BYTES; encoding utf8 replaces partial UTF-8 boundaries, hex is exact. A summary omission is not source absence.", {
             "artifact": string(100), "offset": {"type": "integer", "minimum": 0},
             "length": {"type": "integer", "minimum": 1, "maximum": 4096},
@@ -270,8 +276,6 @@ class ReliabilityTools:
                                   "read": "artifact_read; offsets/lengths are bytes"}
         if self.budget_feedback:
             payload['run_budget'] = self.budget_feedback
-            if self.budget_feedback.get('transmission', {}).get('ordinary_warning'):
-                payload['output_warning'] = 'ordinary_pool_80_percent'
         from ctfbot.tools.presentation import render
         full_presentation = self.registry.evidence.write_artifact(
             json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode(), media_type="application/json")
@@ -279,7 +283,7 @@ class ReliabilityTools:
         presentation_truncated = len(json.dumps(payload).encode()) > self.registry.max_model_output_bytes
         result = {**outcome.result, "observation_id": oid, "raw_response_evidence": raw,
                   "presentation_truncated": presentation_truncated, "presentation_source_evidence": full_presentation}
-        return ToolOutcome(ToolReply(rendered, outcome.reply.success), result)
+        return ToolOutcome(ToolReply(rendered, outcome.reply.success, outcome.reply.images), result)
 
     def read_artifact(self, args):
         data, source = self.registry.evidence.read_artifact(args['artifact'])
@@ -455,15 +459,30 @@ class ReliabilityTools:
             return self.reply({"status": "already_completed", "outcome": self.completion["outcome"]})
         self.selected(args.get("observation_ids", []), self.observations)
         cid = args.get("candidate_id")
-        if args["outcome"] == "candidate_unverified" and cid not in self.candidates:
-            raise ValueError("candidate_unverified requires a recorded candidate_id")
-        if cid is not None and cid not in self.candidates:
-            raise ValueError("candidate_id is not owned by this run")
+        candidate_ids = list(dict.fromkeys(([cid] if cid is not None else []) + args.get("candidate_ids", [])))
+        if any(candidate_id not in self.candidates for candidate_id in candidate_ids):
+            raise ValueError("candidate_ids must identify existing candidates owned by this run")
+        if args["outcome"] in {"completed", "partial", "candidate_unverified"} and not candidate_ids:
+            raise ValueError("completion with flags requires at least one recorded candidate_id")
+        if args["outcome"] == "completed" and args["unresolved"]:
+            raise ValueError("completed must have unresolved=[]; use partial for actual unfinished requested subtasks")
+        if args["outcome"] == "partial" and not args["unresolved"]:
+            raise ValueError("partial requires actual unfinished requested subtasks; use completed when all flags are submitted")
+        # Keep the legacy singular field useful for old consumers of list-only calls.
+        cid = cid if cid is not None else next(iter(candidate_ids), None)
         if not args["summary"].strip():
             raise ValueError("completion summary must explain the result or remaining uncertainty")
-        self.completion = {**args, "contract_version": CONTRACT_VERSION, "verified": False}
-        ref = self.registry.evidence.write_artifact(json.dumps(self.completion).encode(), media_type="application/json")
-        self.registry.evidence.append("completion_recorded", outcome=args["outcome"], candidate_id=cid,
-                                      details=ref, unresolved_count=len(args["unresolved"]), verified=False)
-        return self.reply({"status": "run_complete", "outcome": args["outcome"], "candidate_id": cid,
-                           "verified": False, "details": ref, "contract_version": CONTRACT_VERSION})
+        from ctfbot.reporting.writeup import save_writeup
+        writeup = save_writeup(self.registry.evidence, args["writeup"])
+        completion = {**{key: value for key, value in args.items() if key != "writeup"},
+                           "candidate_id": cid, "candidate_ids": candidate_ids,
+                           "contract_version": CONTRACT_VERSION, "verified": False,
+                           "platform_verification_required": False, "writeup_evidence": writeup, "writeup_path": "writeup.md"}
+        ref = self.registry.evidence.write_artifact(json.dumps(completion).encode(), media_type="application/json")
+        self.registry.evidence.append("completion_recorded", outcome=args["outcome"], candidate_id=cid, candidate_ids=candidate_ids,
+                                      details=ref, unresolved_count=len(args["unresolved"]), verified=False,
+                                      platform_verification_required=False, writeup_evidence=writeup, writeup_path="writeup.md")
+        self.completion = completion
+        return self.reply({"status": "run_complete", "outcome": args["outcome"], "candidate_id": cid, "candidate_ids": candidate_ids,
+                           "verified": False, "details": ref, "contract_version": CONTRACT_VERSION,
+                           "platform_verification_required": False, "writeup_evidence": writeup, "writeup_path": "writeup.md"})

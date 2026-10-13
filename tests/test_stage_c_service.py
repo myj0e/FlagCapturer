@@ -14,7 +14,7 @@ from ctfbot.application.control import RunControl
 from ctfbot.application.service import LocalChallengeService
 from ctfbot.challenge.local_service import LocalServiceSpec
 from ctfbot.challenge.service_fixture import SYNTHETIC_FLAG, import_service_fixture
-from ctfbot.model_adapters.protocol import FakeModelSession, ToolCall, TurnResult
+from ctfbot.model_adapters.protocol import FakeModelSession, ScriptedTurn, ToolCall, TurnResult
 from ctfbot.reporting import generate_basic_report
 from ctfbot.runtime.docker import CommandResult, DockerRuntime, RuntimeErrorSafe
 from ctfbot.runtime.local_service import DockerLocalServiceRuntime
@@ -160,7 +160,7 @@ def test_local_service_health_candidate_report_and_cleanup(tmp_path: Path) -> No
             reply = on_tool_call(ToolCall("command_run", {"argv": ["python3", "solve.py"]}))
             assert SYNTHETIC_FLAG in reply.content
             on_tool_call(ToolCall("candidate_submit", {"candidate": SYNTHETIC_FLAG}))
-            on_tool_call(ToolCall("run_complete", {"outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Synthetic response recorded", "unresolved": []}))
+            on_tool_call(ToolCall("run_complete", {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', "outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Synthetic response recorded", "unresolved": []}))
             return TurnResult("", tool_calls=2)
 
         def close(self):
@@ -177,7 +177,7 @@ def test_local_service_health_candidate_report_and_cleanup(tmp_path: Path) -> No
     ), patch.object(
         DockerRuntime, "execute", probe_or_solve
     ):
-        result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
+        result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits())
 
     assert result.status == "candidate_unverified"
     assert not docker.resources
@@ -231,7 +231,7 @@ def test_local_service_failure_and_cancel_keep_evidence_and_cleanup(tmp_path: Pa
                 def close(self):
                     pass
             return CancellingModel()
-        return FakeModelSession(())
+        return FakeModelSession((ScriptedTurn(tool_calls=(ToolCall("run_complete", {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', "outcome":"unsolved", "summary":"done", "unresolved":[]}),)),))
 
     service = LocalChallengeService(model_factory=make_model, model_metadata={}, service_runtime_factory=factory)
     with patch("ctfbot.runtime.local_service.subprocess.run", side_effect=docker), patch(
@@ -239,7 +239,7 @@ def test_local_service_failure_and_cancel_keep_evidence_and_cleanup(tmp_path: Pa
     ), patch.object(
         DockerRuntime, "execute", probe
     ):
-        result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1), control=control)
+        result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits(), control=control)
     recorded = events(result)
     states = [e["state"] for e in recorded if e["event_type"] == "service_lifecycle"]
     if outcome == "cleanup_failure":
@@ -254,7 +254,7 @@ def test_local_service_failure_and_cancel_keep_evidence_and_cleanup(tmp_path: Pa
         assert not provider_calls
     assert result.status == {"startup_failure": "error", "cancel_during_readiness": "user_cancelled",
                              "cancel_during_agent": "user_cancelled",
-                             "provider_failure": "provider_error", "cleanup_failure": "unverified"}[outcome]
+                             "provider_failure": "provider_error", "cleanup_failure": "unsolved"}[outcome]
     assert "service_lifecycle" in generate_basic_report(Path(result.run_dir)).read_text()
 
 
@@ -288,8 +288,7 @@ def test_cleanup_refuses_resources_owned_by_another_run(tmp_path: Path) -> None:
     assert not any("rm" in call for call in docker.calls)
 
 
-@pytest.mark.parametrize("wall_limit", [None, 0.2])
-def test_readiness_timeout_cleans_service_without_starting_provider(tmp_path: Path, wall_limit: float | None) -> None:
+def test_readiness_timeout_cleans_service_without_starting_provider(tmp_path: Path) -> None:
     workspace = fixture(tmp_path)
     path = workspace / "provenance.json"
     provenance = json.loads(path.read_text())
@@ -307,12 +306,12 @@ def test_readiness_timeout_cleans_service_without_starting_provider(tmp_path: Pa
         "ctfbot.runtime.local_service.subprocess.Popen", side_effect=docker.popen
     ), patch.object(DockerRuntime, "execute", return_value=CommandResult(1, b"", b"not ready")):
         result = service.run(workspace, IMAGE, tmp_path / "runs",
-                             RunLimits(wall_time_seconds=wall_limit or 1800))
-    assert result.status == ("budget_exhausted" if wall_limit else "error")
+                             RunLimits())
+    assert result.status == "error"
     assert not docker.resources
     assert not any(e.get("state") == "healthy" for e in events(result))
     failed = next(e for e in events(result) if e["event_type"] == "run_failed")
-    assert failed["failure_class"] == ("timeout" if wall_limit else "environment_error")
+    assert failed["failure_class"] == "environment_error"
 
 
 def test_offline_import_cannot_silently_activate_service_config(tmp_path: Path) -> None:

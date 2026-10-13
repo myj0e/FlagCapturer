@@ -65,7 +65,7 @@ def diagnose_run(run_dir: Path) -> dict:
         elif kind == 'candidate_check_recorded':
             checks.append({key: e.get(key) for key in ('seq','check_id','candidate_id','passed','validation_level','verified','details')})
         elif kind in {'controller_decision','completion_recorded','run_finished','run_cancelled','sandbox_error'}:
-            safe_keys = ('seq','event_type','turn','action','reason','outcome','candidate_id','details',
+            safe_keys = ('seq','event_type','turn','action','reason','outcome','candidate_id','candidate_ids','details',
                          'unresolved_count','status','stop_reason','result_status','result_contract_version','call_counts')
             decisions.append({key: e[key] for key in safe_keys if key in e})
             if kind == 'run_finished': last_completed = decisions[-1]

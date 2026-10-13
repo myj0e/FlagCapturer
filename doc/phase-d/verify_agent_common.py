@@ -45,7 +45,7 @@ class Provider:
         if self.mode == 'unsolved':
             call('claim_record',statement='Input alone does not justify another experiment',state='hypothesis',
                  observation_ids=[source['observation']['id']],experiment_ids=[],unknowns=['method'])
-            call('run_complete',outcome='unsolved',summary='No justified next experiment in this authored attempt',unresolved=['method'])
+            call('run_complete',outcome='unsolved',summary='No justified next experiment in this authored attempt',unresolved=['method'], writeup='# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.')
             return TurnResult(text='Explicitly unsolved',tool_calls=count)
         operation = {'crypto':'base64_equals','json':'json_field_equals','http':'http_body_equals'}[self.mode]
         selector = '/payload/flag' if self.mode=='json' else ''
@@ -83,7 +83,7 @@ class Provider:
         assert checked['passed'] and not checked['verified']
         call('run_complete',outcome='candidate_unverified',candidate_id=candidate['candidate_id'],
              observation_ids=[execution['observation']['id']],summary='Retain locally checked candidate',
-             unresolved=['No trusted answer verification'])
+             unresolved=['No trusted answer verification'], writeup='# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.')
         return TurnResult(text='Authored trajectory completed',tool_calls=count)
 
 
@@ -116,7 +116,7 @@ def main():
         workspace=import_single_file(original,output/'imports',authorize_model_data=True)
         service=LocalChallengeService(model_factory=lambda m=mode,f=filename,d=data:Provider(m,f,d,args.exercise_unlimited),
             model_metadata={'provider':'authored-deterministic'},runtime_factory=factory)
-        result=service.run(workspace,choice.image,output/'runs',RunLimits(max_turns=2,wall_time_seconds=120))
+        result=service.run(workspace,choice.image,output/'runs',RunLimits())
         if args.exercise_unlimited and mode == 'crypto':
             assert result.tool_calls > 60
         assert result.status == ('unsolved' if mode=='unsolved' else 'candidate_unverified'),result

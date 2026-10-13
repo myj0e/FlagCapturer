@@ -138,7 +138,7 @@ class LocalChallengeService:
             inputs=inputs,
             model_data_authorized=provenance.get("model_data_authorized") is True and basis is not None,
             authorization_basis=basis,
-            verifier="model-selected candidate; correctness unverified",
+            verifier="agent-submitted flag completes its objective; no platform verification required",
             runtime_profile=("candidate controller TCP connector; offline solver; pinned IP and bounded authorization window"
                              if remote else "local service candidate; isolated IPv4 bridge; no external DNS or published ports"
                              if spec else "offline Docker; read-only input; bounded tmpfs workdir"),

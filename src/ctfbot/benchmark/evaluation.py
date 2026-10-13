@@ -1,4 +1,4 @@
-"""Versioned D-stage datasets and bounded evaluation through the shared service."""
+"""Versioned D-stage datasets and manually cancellable evaluation through the shared service."""
 
 from __future__ import annotations
 
@@ -7,9 +7,8 @@ import json
 import math
 import os
 import re
-import time
 import uuid
-from dataclasses import asdict, replace
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -115,7 +114,7 @@ def _run_metrics(run_dir: Path) -> dict[str, Any]:
 
 def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
     started = [row for row in rows if row.get("run_id")]
-    completed_candidates = sum(row.get("status") == "candidate_unverified" for row in rows)
+    completed_candidates = sum(row.get("status") in {"completed", "candidate_unverified"} for row in rows)
     environment = sum(row.get("environment_error") is True for row in rows)
     provider = sum(row.get("status") == "provider_error" for row in rows)
     elapsed = sorted(row["elapsed_seconds"] for row in rows if isinstance(row.get("elapsed_seconds"), (int, float)))
@@ -147,14 +146,10 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def run_evaluation(*, dataset_path: Path, service: LocalChallengeService, runtime_image: str,
-                   output: Path, limits: RunLimits, max_total_turns: int, max_total_tool_calls: int,
-                   max_total_wall_seconds: int = 3600, repetitions: int = 1,
+                   output: Path, limits: RunLimits, repetitions: int = 1,
                    development_reference: Path | None = None, control: RunControl | None = None) -> Path:
-    if (type(max_total_turns) is not int or not 1 <= max_total_turns <= 690
-            or type(max_total_tool_calls) is not int or not 1 <= max_total_tool_calls <= 5000
-            or type(max_total_wall_seconds) is not int or not 1 <= max_total_wall_seconds <= 86400
-            or type(repetitions) is not int or not 1 <= repetitions <= 3):
-        raise ValueError("evaluation requires bounded turn/tool/wall budgets and 1 to 3 repetitions")
+    if type(repetitions) is not int or not 1 <= repetitions <= 3:
+        raise ValueError("evaluation allows 1 to 3 repetitions")
     dataset = load_dataset(dataset_path)
     control = control or RunControl()
     split_audit = None
@@ -183,12 +178,9 @@ def run_evaluation(*, dataset_path: Path, service: LocalChallengeService, runtim
     summary_path = batch_dir / "summary.json"
     rows: list[dict[str, Any]] = []
     jobs = [(case, repeat) for repeat in range(1, repetitions+1) for case in dataset["cases"]]
-    remaining_turns, remaining_tools = max_total_turns, max_total_tool_calls
     halt_reason = None
-    deadline = time.monotonic() + max_total_wall_seconds
     conditions = {"runtime_image": runtime_image, "per_run_limits": asdict(limits),
-                  "max_total_turns": max_total_turns, "max_total_tool_calls": max_total_tool_calls,
-                  "max_total_wall_seconds": max_total_wall_seconds, "repetitions": repetitions,
+                  "automatic_budget_stop": False, "repetitions": repetitions,
                   "memory_mode": service.evaluation_mode, "memory_namespaces": list(service.memory_namespaces),
                   "automatic_retry": False}
     def persist(status):
@@ -197,7 +189,6 @@ def run_evaluation(*, dataset_path: Path, service: LocalChallengeService, runtim
                       "conditions": conditions, "split_audit": split_audit, "runs": rows,
                       "aggregate": _aggregate(rows), "categories": {name: _aggregate([row for row in rows if row["category"] == name]) for name in CATEGORIES},
                       "per_challenge": {case["challenge_id"]: _aggregate([row for row in rows if row["challenge_id"] == case["challenge_id"]]) for case in dataset["cases"]},
-                      "remaining_turns": remaining_turns, "remaining_tool_calls": remaining_tools,
                       "generalization_claim": "none; public mechanisms/authored fixtures are engineering evidence only"})
         lines = ["# Controlled evaluation", "", f"Status: `{_safe_inline(status)}`", "",
                  f"Dataset: `{_safe_inline(dataset['dataset_id'])}` / `{_safe_inline(dataset['version'])}` / `{dataset['split']}`", "",
@@ -217,27 +208,19 @@ def run_evaluation(*, dataset_path: Path, service: LocalChallengeService, runtim
     for case, repeat in jobs:
         row = {key: case[key] for key in ("challenge_id", "category", "labels", "exposure", "contamination", "mechanism")}
         row["replicate"] = repeat
-        remaining_wall = deadline - time.monotonic()
-        if halt_reason or control.cancelled or remaining_turns <= 0 or remaining_tools <= 0 or remaining_wall <= 0:
-            row["status"] = f"not_run_{halt_reason}" if halt_reason else "not_run_cancelled" if control.cancelled else "not_run_budget_exhausted"
+        if halt_reason or control.cancelled:
+            row["status"] = f"not_run_{halt_reason}" if halt_reason else "not_run_cancelled"
             rows.append(row); persist("running"); continue
-        allocation = replace(limits, max_turns=min(limits.max_turns, remaining_turns),
-                             max_tool_calls=min(limits.max_tool_calls, remaining_tools) if limits.max_tool_calls is not None else remaining_tools,
-                             wall_time_seconds=min(limits.wall_time_seconds, remaining_wall))
-        remaining_turns -= allocation.max_turns
-        remaining_tools -= allocation.max_tool_calls
         try:
             frozen = snapshots[case["challenge_id"]]
             if (hashlib.sha256((case["workspace"] / "provenance.json").read_bytes()).hexdigest() != frozen["provenance_sha256"]):
                 raise ValueError("case changed after evaluation preflight")
-            current = service.preview(case["workspace"], runtime_image, batch_dir / "runs", allocation)
+            current = service.preview(case["workspace"], runtime_image, batch_dir / "runs", limits)
             if not current.start_allowed or not current.memory_policy or current.memory_policy["snapshot_sha256"] != frozen["memory_snapshot_sha256"]:
                 raise ValueError("execution policy or approved memory changed after evaluation preflight")
-            result = service.run(case["workspace"], runtime_image, batch_dir / "runs", allocation, control=control)
+            result = service.run(case["workspace"], runtime_image, batch_dir / "runs", limits, control=control)
             if result.status == "user_cancelled":
                 control.cancel()
-            remaining_turns += max(0, allocation.max_turns - result.turns)
-            remaining_tools += max(0, allocation.max_tool_calls - result.tool_calls)
             row.update(run_id=result.run_id, run_dir=result.run_dir, status=result.status, stop_reason=result.stop_reason,
                        turns=result.turns, tool_calls=result.tool_calls,
                        usage_totals=result.usage_totals, cleanup_errors=list(result.cleanup_errors))
@@ -254,7 +237,6 @@ def run_evaluation(*, dataset_path: Path, service: LocalChallengeService, runtim
             control.cancel()
             row.update(status="not_run_cancelled", error_type="KeyboardInterrupt")
         except Exception as exc:
-            # Reserve the full allocation if the controller cannot determine usage.
             row.update(status="environment_or_controller_error", environment_error=True, error_type=type(exc).__name__)
         rows.append(row)
         persist("running")

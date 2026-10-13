@@ -59,7 +59,8 @@ def test_tui_single_file_authorization_preview_and_run(tmp_path, folder_input):
     selected = folder if folder_input else source
     async def scenario():
         app = CTFBotApp(service=service([ScriptedTurn(tool_calls=(
-            ToolCall("candidate_submit", {"candidate": "flag{a}"}),))]),
+            ToolCall("candidate_submit", {"candidate": "flag{a}"}),
+            ToolCall("run_complete", {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', "outcome":"candidate_unverified", "candidate_id":"candidate-1", "summary":"retain candidate", "unresolved":[]}),))]),
             runtime_image=IMAGE, runs_root=tmp_path / "runs", imports_root=tmp_path / "imports")
         async with app.run_test(size=(120, 40)) as pilot:
             app.query_one("#workspace-path", Input).value = str(selected)
@@ -73,7 +74,7 @@ def test_tui_single_file_authorization_preview_and_run(tmp_path, folder_input):
             await pilot.pause(.1)
             assert app._preview is not None
             assert app.query_one("#run", Button).disabled
-            assert "model-selected candidate; correctness unverified" in app._preview_text
+            assert "agent-submitted flag completes its objective; no platform verification required" in app._preview_text
             assert not app.query("#flag-format")
             await pilot.click("#file-model-transfer")
             await pilot.pause(.1)

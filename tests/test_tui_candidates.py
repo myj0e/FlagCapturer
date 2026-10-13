@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 import asyncio
 from pathlib import Path
 
@@ -14,16 +15,24 @@ from ctfbot.tui.safe_text import safe_plain_text
 from test_stage_b_tui import CANDIDATE, ALTERNATE_CANDIDATE, IMAGE, fill_fields, make_service, make_workspace
 
 
+@pytest.fixture(autouse=True)
+def isolated_clipboard(monkeypatch):
+    # Exercise the terminal route without touching the user's desktop clipboard.
+    monkeypatch.setattr("ctfbot.tui.clipboard._command_copy", lambda *_: False)
+    monkeypatch.setattr("ctfbot.tui.clipboard._windows_copy", lambda *_: False)
+    monkeypatch.setattr("ctfbot.tui.clipboard._x11_copy", lambda *_: False)
+
+
 def test_completed_run_candidates_can_be_selected_copied_and_reopened(tmp_path: Path):
     workspace = make_workspace(tmp_path)
     service = make_service(lambda: FakeModelSession([
         ScriptedTurn(tool_calls=(ToolCall('candidate_submit', {'candidate': ALTERNATE_CANDIDATE}),
                                  ToolCall('candidate_submit', {'candidate': CANDIDATE}),
-                                 ToolCall('run_complete', {'outcome': 'candidate_unverified', 'candidate_id': 'candidate-2', 'summary': 'Retain both candidates', 'unresolved': []})))
+                                 ToolCall('run_complete', {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', 'outcome': 'candidate_unverified', 'candidate_id': 'candidate-2', 'summary': 'Retain both candidates', 'unresolved': []})))
     ]))
 
     async def scenario():
-        app = CTFBotApp(service=service, runtime_image=IMAGE, runs_root=tmp_path/'runs', limits=RunLimits(max_turns=1))
+        app = CTFBotApp(service=service, runtime_image=IMAGE, runs_root=tmp_path/'runs', limits=RunLimits())
         async with app.run_test(size=(120, 40)) as pilot:
             assert app.query_one('#candidates', Button).disabled
             fill_fields(app, workspace, tmp_path/'runs')
@@ -77,6 +86,9 @@ def test_clipboard_preserves_full_original_while_display_escapes_controls():
             app.push_screen(CandidateScreen((FlagCandidate('candidate-1', value, 'unverified'),)))
             await pilot.pause()
             assert app.screen.query_one('#candidate-value', TextArea).text == safe_plain_text(value)
+            await pilot.resize_terminal(80, 24)
+            await pilot.pause()
+            assert app.screen.query_one('#copy-candidate').region.bottom < 24
             await pilot.click('#copy-candidate')
             assert app.clipboard == value
             await pilot.press('escape')

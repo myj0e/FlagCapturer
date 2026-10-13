@@ -10,7 +10,7 @@ import pytest
 from ctfbot.agent.loop import RunLimits
 from ctfbot.application.baseline import BaselineAdmissionError
 from ctfbot.application.service import LocalChallengeService
-from ctfbot.model_adapters.protocol import FakeModelSession
+from ctfbot.model_adapters.protocol import FakeModelSession, ScriptedTurn, ToolCall
 from ctfbot.tools.registry import CommandResult
 
 
@@ -94,7 +94,7 @@ def test_preview_reports_hash_authorization_verifier_and_offline_profile(tmp_pat
     assert preview.inputs[0].bytes == len(b"synthetic attachment bytes")
     assert preview.model_data_authorized is True
     assert preview.authorization_basis == "synthetic test authorization"
-    assert preview.verifier == "model-selected candidate; correctness unverified"
+    assert preview.verifier == "agent-submitted flag completes its objective; no platform verification required"
     assert preview.runtime_profile == "offline Docker; read-only input; bounded tmpfs workdir"
     assert preview.runtime_image == IMAGE
     assert "CTFBOT_SYNTHETIC{secret-value}" not in repr(preview)
@@ -109,7 +109,7 @@ def test_unauthorized_run_stops_before_model_or_runtime_factory(tmp_path: Path) 
     )
 
     with pytest.raises(BaselineAdmissionError, match="transmission to a model"):
-        service.run(workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
+        service.run(workspace, IMAGE, tmp_path / "runs", RunLimits())
 
     assert calls == []
     assert not (tmp_path / "runs").exists()
@@ -134,7 +134,7 @@ def test_service_run_uses_injected_model_and_runtime_after_preflight(tmp_path: P
 
     def make_model() -> FakeModelSession:
         calls.append("model")
-        return FakeModelSession(())
+        return FakeModelSession((ScriptedTurn(tool_calls=(ToolCall("run_complete", {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', "outcome":"unsolved", "summary":"done", "unresolved":[]}),)),))
 
     def make_runtime(root: Path, image: str) -> FakeRuntime:
         calls.append("runtime")
@@ -143,9 +143,9 @@ def test_service_run_uses_injected_model_and_runtime_after_preflight(tmp_path: P
         return runtime
 
     service = service_for(make_model, make_runtime)
-    result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits(max_turns=1))
+    result = service.run(workspace, IMAGE, tmp_path / "runs", RunLimits())
 
-    assert result.status == "unverified"
+    assert result.status == "unsolved"
     assert calls == ["model", "runtime"]
     assert runtime_instances[0].challenge_root == workspace / "input"
     assert runtime_instances[0].image == IMAGE

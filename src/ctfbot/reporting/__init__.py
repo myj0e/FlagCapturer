@@ -78,7 +78,10 @@ def generate_basic_report(run_dir: Path) -> Path:
         lines.extend([f"- Tool reply transmission: `{transmission.get('tool_reply_bytes', 'unknown')}` UTF-8 bytes (not context tokens)",
                       f"- Prompt / argument / public message bytes: `{transmission.get('prompt_bytes', 'unknown')}` / `{transmission.get('argument_bytes', 'unknown')}` / `{transmission.get('public_message_bytes', 'unknown')}`"])
         for name, pool in transmission.get('pools', {}).items():
-            lines.append(f"- Reply pool {_safe_inline(name)}: `{pool['used']}` / `{pool['limit']}` bytes")
+            if "limit" in pool:  # Historical runs used cumulative quotas.
+                lines.append(f"- Reply pool {_safe_inline(name)}: `{pool['used']}` / `{pool['limit']}` bytes")
+            else:
+                lines.append(f"- Reply transmission {_safe_inline(name)}: `{pool['used']}` bytes (no cumulative quota)")
     lines.append("- Provider current context occupancy: `unknown; billing usage is separate`")
     restores = sum(e.get('event_type') == 'context_restore_delivered' for e in events)
     lines.append(f"- Context restoration injections: `{restores}`; pending: `{_safe_inline(result.get('context_restore_pending') or 'none')}`")
@@ -124,7 +127,7 @@ def generate_basic_report(run_dir: Path) -> Path:
     limits = metadata.get("limits", {})
     if isinstance(limits, dict) and limits:
         for key in sorted(limits):
-            value = 'unlimited (count only)' if key == 'max_tool_calls' and limits[key] is None else limits[key]
+            value = limits[key]
             lines.append(f"- `{_safe_inline(key)}`: `{_safe_inline(value)}`")
     else:
         lines.append("- No run limits were present.")
@@ -137,7 +140,9 @@ def generate_basic_report(run_dir: Path) -> Path:
             lines.append(f"- {category}: requested={_safe_inline(row.get('requested', 0))}, admitted={_safe_inline(row.get('admitted', 0))}, rejected={_safe_inline(row.get('rejected', 0))}")
     lines.extend(["", "## Recorded timeline", ""])
     lines.extend(["- `unsolved` means this attempt did not solve the challenge; it is not proof of impossibility.",
-                  "- `candidate_unverified` records a completed attempt with a candidate, not confirmed correctness.",
+                  "- `completed` means all requested flags have been submitted; no platform acceptance is pending.",
+                  "- `partial` retains flags with actual unfinished requested subtasks.",
+                  "- `candidate_unverified` is a legacy completed-result status.",
                   "- Local checks, model-reported support and process exit codes never become proof of flag correctness.", ""])
     for event in events:
         event_type = event.get("event_type", "unknown")
@@ -149,6 +154,8 @@ def generate_basic_report(run_dir: Path) -> Path:
             f"`{_safe_inline(event_type)}`{suffix}"
         )
 
+    if (resolved / "writeup.md").is_file():
+        lines.extend(["", "## Agent writeup", "", "- [Agent-authored solution](writeup.md)", ""])
     evidence_refs = sorted(_collect_artifact_refs(events))
     lines.extend(["", "## Evidence references", ""])
     if evidence_refs:
@@ -174,11 +181,13 @@ def generate_basic_report(run_dir: Path) -> Path:
 def _timeline_details(event: dict[str, Any]) -> str:
     event_type = event.get("event_type")
     if event_type == 'completion_recorded':
-        return f"explicit completion `{_safe_inline(event.get('outcome'))}`; unresolved items `{event.get('unresolved_count', 0)}`"
+        ids = event.get('candidate_ids') or ([event['candidate_id']] if event.get('candidate_id') else [])
+        retained = ", ".join(_safe_inline(cid) for cid in ids)
+        return f"explicit completion `{_safe_inline(event.get('outcome'))}`; retained candidates `{retained or 'none'}`; unresolved items `{event.get('unresolved_count', 0)}`"
     if event_type == 'controller_decision':
         return f"controller `{_safe_inline(event.get('action'))}`: `{_safe_inline(event.get('reason'))}`"
     if event_type == 'candidate_recorded':
-        return f"candidate `{_safe_inline(event.get('candidate_id'))}`; `{_safe_inline(event.get('status'))}`; correctness unverified"
+        return f"candidate `{_safe_inline(event.get('candidate_id'))}`; `{_safe_inline(event.get('status'))}`; flag submitted; objective completed"
     if event_type == 'candidate_check_recorded':
         return f"local check `{_safe_inline(event.get('check_id'))}` for `{_safe_inline(event.get('candidate_id'))}`; passed `{event.get('passed')}`; not trusted verification"
     if event_type == "tool_call":

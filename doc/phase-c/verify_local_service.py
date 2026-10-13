@@ -150,7 +150,7 @@ def lifecycle_acceptance(output: Path, image: str, outcome: str) -> dict:
         manifest = json.loads(path.read_text())
         manifest["local_service"]["argv"] = (["/bin/sh", "-c", "exit 7"] if outcome == "service_exit"
                                                else ["/bin/sleep", "30"])
-        manifest["local_service"]["startup_timeout_seconds"] = 2 if outcome == "readiness_timeout" else 15
+        manifest["local_service"]["startup_timeout_seconds"] = 2 if outcome in {"readiness_timeout", "run_timeout"} else 15
         path.chmod(0o600)
         path.write_text(json.dumps(manifest), encoding="utf-8")
         path.chmod(0o444)
@@ -180,7 +180,7 @@ def lifecycle_acceptance(output: Path, image: str, outcome: str) -> dict:
             candidate = payload["stdout"].strip()
             require(candidate == SYNTHETIC_FLAG, "unexpected service response")
             on_tool_call(ToolCall("candidate_submit", {"candidate": candidate}))
-            on_tool_call(ToolCall("run_complete", {"outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Synthetic response recorded", "unresolved": []}))
+            on_tool_call(ToolCall("run_complete", {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', "outcome": "candidate_unverified", "candidate_id": "candidate-1", "summary": "Synthetic response recorded", "unresolved": []}))
             return TurnResult("", tool_calls=2)
 
         def close(self):
@@ -195,10 +195,9 @@ def lifecycle_acceptance(output: Path, image: str, outcome: str) -> dict:
     service = LocalChallengeService(model_factory=make_model, model_metadata={"provider": "synthetic"},
                                     service_runtime_factory=factory)
     result = service.run(workspace, image, output / "runs",
-                         RunLimits(max_turns=1, wall_time_seconds=2 if outcome == "run_timeout" else 30,
-                                   tool_timeout_seconds=5), control=control)
+                         RunLimits(tool_timeout_seconds=5), control=control)
     expected = {"solve": "candidate_unverified", "cancel": "user_cancelled", "provider_failure": "provider_error",
-                "readiness_timeout": "error", "run_timeout": "budget_exhausted",
+                "readiness_timeout": "error", "run_timeout": "error",
                 "service_exit": "error", "cancel_startup": "user_cancelled"}[outcome]
     require(result.status == expected, f"{outcome}: expected {expected}, got {result.status}")
     require(not result.cleanup_errors, "run reported cleanup failure")

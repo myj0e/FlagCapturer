@@ -145,7 +145,7 @@ def install_domain_tools(registry) -> None:
         saved[_relative(args["path"])]["last_execution"] = {**registry.reliability.call_context, **outcome.result}
         return outcome
 
-    define("script_run", "Run previously saved script bytes after checking their SHA-256; network policy and tool budget are unchanged.", {
+    define("script_run", "Run previously saved script bytes after checking their SHA-256; network policy, wall-time and per-tool output limits are unchanged.", {
         "path": path_schema, "argv": {"type": "array", "items": {"type": "string", "maxLength": 512}, "maxItems": 16},
     }, script_run)
 
@@ -155,7 +155,7 @@ def install_domain_tools(registry) -> None:
         return outcome
 
     if callable(getattr(registry.runtime, "start_script_session", None)):
-        define("script_start", "Start a saved, hash-checked Python script as a background session without the 120s command limit. Returns session_id immediately. Use session_read (elapsed_seconds/output_idle_seconds) to assess progress and session_close to stop only this script. Silence alone does not kill it; the remaining run budget still applies. Print flushed progress every 5-10s and checkpoint in /work.", {
+        define("script_start", "Start a saved, hash-checked Python script as a background session without the 120s command limit. Returns session_id immediately. Use session_read (elapsed_seconds/output_idle_seconds) to assess progress and session_close to stop only this script. Silence alone does not kill it; this script has its own timeout, not an overall task budget. Print flushed progress every 5-10s and checkpoint in /work.", {
             "path": path_schema, "argv": {"type": "array", "items": {"type": "string", "maxLength": 512}, "maxItems": 16},
         }, script_start)
 

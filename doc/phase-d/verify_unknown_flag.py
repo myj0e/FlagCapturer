@@ -40,7 +40,7 @@ async def verify(output: Path, single_file: bool = False):
     service=LocalChallengeService(model_factory=lambda:AuthoredProvider(category),
                                   model_metadata={'provider':'authored-deterministic'},runtime_factory=factory)
     app=CTFBotApp(service=service,runs_root=output/'runs',imports_root=output/'imports',additional_prompt='Flag 前缀为 CTFBOT_SYNTHETIC',
-                  limits=RunLimits(max_turns=1))
+                  limits=RunLimits())
     async with app.run_test(size=(120,40)) as pilot:
         app.query_one('#workspace-path',Input).value=str(case['workspace']/'input'/'program.elf' if single_file else case['workspace'])
         app.query_one('#file-model-transfer',Checkbox).value=single_file

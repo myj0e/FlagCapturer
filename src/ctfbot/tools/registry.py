@@ -86,6 +86,7 @@ class ToolRegistry:
             self.network_description = (f"The command container has no network. Only remote_tcp_exchange can reach "
                                         f"{remote_spec.endpoint}, within the controller authorization time window.")
         self.provider_context = {"usage": None, "capacity": None, "source": "unknown"}
+        self.supports_images = False
         self.scripts: dict[str, dict[str, Any]] = {}
         self.checkpoints: dict[str, dict[str, Any]] = {}
         self.session_records: dict[str, tuple[dict[str, Any], _SessionTranscript]] = {}
@@ -126,6 +127,8 @@ class ToolRegistry:
                 }), self._remote_exchange)
         from ctfbot.tools.domain import install_domain_tools
         install_domain_tools(self)
+        from ctfbot.tools.image_view import install_image_tool
+        install_image_tool(self)
         from ctfbot.tools.reliability import ReliabilityTools
         self.reliability = ReliabilityTools(self)
         from ctfbot.agent.context import RunContextState
@@ -163,7 +166,8 @@ class ToolRegistry:
 
     @property
     def specs(self) -> tuple[ToolSpec, ...]:
-        return tuple(spec for spec, _ in self._definitions.values())
+        return tuple(spec for spec, _ in self._definitions.values()
+                     if spec.name != "image_view" or self.supports_images)
 
     def invoke(self, call: ToolCall) -> ToolOutcome:
         outcome = self._invoke(call)
@@ -328,7 +332,7 @@ class ToolRegistry:
                     }, "required": ["session_id", "input"], "additionalProperties": False,
                 }), self._session_send),
             "session_read": (
-                ToolSpec("session_read", "Read bounded output from an interactive process. wait_seconds <=10 returns on new output; optional collect_seconds <=60 coalesces heartbeats until completion, error, output cap or deadline. Reading never resets output_idle_seconds.", {
+                ToolSpec("session_read", "Read bounded output from a live process. truncated=true means older output was dropped from bounded retention; a session whose status is running remains alive and may be read again. wait_seconds <=10 returns on new output; optional collect_seconds <=60 coalesces output until completion, timeout or deadline. Reading never resets output_idle_seconds.", {
                     "type": "object", "properties": {
                         "session_id": session_id,
                         "wait_seconds": {"type": "number", "minimum": 0, "maximum": 10},
@@ -433,7 +437,7 @@ class ToolRegistry:
         )
         chunks = [result.data]
         size = len(result.data)
-        while collect and result.status == 'running' and not result.timed_out and not result.truncated and size < maximum_bytes:
+        while collect and result.status == 'running' and not result.timed_out and size < maximum_bytes:
             remaining = deadline-time.monotonic()
             if remaining <= 0:
                 break
@@ -512,7 +516,9 @@ class ToolRegistry:
         candidate_artifact = self.evidence.write_artifact(raw, media_type="text/plain; charset=utf-8")
         result = {
             "status": "unverified",
-            "verification_method": "none",
+            "verification_method": "not_required",
+            "task_status": "completed",
+            "platform_verification_required": False,
             "candidate_sha256": hashlib.sha256(raw).hexdigest(),
             "candidate_evidence": candidate_artifact,
         }

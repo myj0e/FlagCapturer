@@ -40,7 +40,7 @@ def test_explicit_unsolved_stops_once_independently_of_input_type(tmp_path, cont
     tools = registry(tmp_path, content)
     model = FakeModelSession([
         ScriptedTurn(tool_calls=(ToolCall('challenge_list', {'path':'.'}),
-            ToolCall('run_complete', {'outcome':'unsolved', 'summary':'No justified next experiment', 'unresolved':['unknown key']}),
+            ToolCall('run_complete', {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', 'outcome':'unsolved', 'summary':'No justified next experiment', 'unresolved':['unknown key']}),
             ToolCall('command_run', {'argv':['must-not-run']}))),
         ScriptedTurn(text='must not continue'),
     ])
@@ -58,7 +58,7 @@ def test_format_candidate_does_not_complete_or_verify_and_can_be_checked_later(t
     model = FakeModelSession([ScriptedTurn(tool_calls=(
         ToolCall('candidate_submit', {'candidate':'flag{decoy}', 'unchecked_reason':'Only a guess'}),
         ToolCall('challenge_read_bytes', {'path':'input.txt', 'offset':0, 'length':16}),
-        ToolCall('run_complete', {'outcome':'candidate_unverified', 'candidate_id':'candidate-1', 'summary':'Not established', 'unresolved':['no trusted check']}),
+        ToolCall('run_complete', {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', 'outcome':'candidate_unverified', 'candidate_id':'candidate-1', 'summary':'Not established', 'unresolved':['no trusted check']}),
     ))])
     result = AgentLoop(model, tools, tools.evidence).run('authored task')
     assert result.status == 'candidate_unverified' and result.candidate_ids == ('candidate-1',)
@@ -70,7 +70,7 @@ def test_no_completion_continuation_never_demands_a_guess_and_persists_actual_pr
     tools = registry(tmp_path)
     model = FakeModelSession([
         ScriptedTurn(tool_calls=(ToolCall('challenge_list', {'path':'.'}),), text='No result from this limited search.'),
-        ScriptedTurn(tool_calls=(ToolCall('run_complete', {'outcome':'unsolved', 'summary':'No justified step', 'unresolved':[]}),)),
+        ScriptedTurn(tool_calls=(ToolCall('run_complete', {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', 'outcome':'unsolved', 'summary':'No justified step', 'unresolved':[]}),)),
     ])
     result = AgentLoop(model, tools, tools.evidence).run('authored task')
     assert result.status == 'unsolved' and result.turns == 2
@@ -92,7 +92,7 @@ def test_provider_interruption_after_accepted_completion_keeps_unsolved(tmp_path
             raise TimeoutError('provider interrupted after explicit completion')
 
     tools = registry(tmp_path)
-    model = InterruptedProvider([ScriptedTurn(tool_calls=(ToolCall('run_complete', {
+    model = InterruptedProvider([ScriptedTurn(tool_calls=(ToolCall('run_complete', {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.',
         'outcome':'unsolved', 'summary':'Insufficient evidence', 'unresolved':[]}),))])
     result = AgentLoop(model, tools, tools.evidence).run('authored task')
     assert result.status == 'unsolved' and model.closed
@@ -101,20 +101,21 @@ def test_provider_interruption_after_accepted_completion_keeps_unsolved(tmp_path
 def test_completion_rejects_invented_candidate_and_trusted_outcome(tmp_path):
     tools = registry(tmp_path)
     for arguments in (
-        {'outcome':'candidate_unverified', 'candidate_id':'candidate-invented', 'summary':'guess', 'unresolved':[]},
-        {'outcome':'verified', 'summary':'self reported', 'unresolved':[]},
+        {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', 'outcome':'candidate_unverified', 'candidate_id':'candidate-invented', 'summary':'guess', 'unresolved':[]},
+        {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', 'outcome':'verified', 'summary':'self reported', 'unresolved':[]},
     ):
         outcome = tools.invoke(ToolCall('run_complete', arguments))
         assert not outcome.reply.success
     assert tools.reliability.completion is None
 
 
-def test_candidate_without_completion_can_exhaust_budget(tmp_path):
+def test_candidate_without_completion_continues_until_explicit_finish(tmp_path):
     tools = registry(tmp_path)
     model = FakeModelSession([ScriptedTurn(tool_calls=(ToolCall('candidate_submit', {
-        'candidate':'flag{guess}', 'unchecked_reason':'No checker yet'}),))])
-    result = AgentLoop(model, tools, tools.evidence, limits=RunLimits(max_turns=1)).run('authored task')
-    assert result.status == 'budget_exhausted'
+        'candidate':'flag{guess}', 'unchecked_reason':'No checker yet'}),)),
+        ScriptedTurn(tool_calls=(ToolCall('run_complete', {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', 'outcome':'candidate_unverified', 'candidate_id':'candidate-1', 'summary':'retained', 'unresolved':[]}),))])
+    result = AgentLoop(model, tools, tools.evidence, limits=RunLimits()).run('authored task')
+    assert result.status == 'candidate_unverified' and result.turns == 2
     assert result.candidate_ids == ('candidate-1',)
 
 
@@ -234,10 +235,10 @@ def test_diagnosis_is_read_only_indexes_model_visible_evidence_and_redacts_raw_c
     service = LocalChallengeService(model_factory=lambda:FakeModelSession([
         ScriptedTurn(tool_calls=(ToolCall('challenge_list',{'path':'.'}),),text='PRIVATE_PUBLIC_MESSAGE_SENTINEL'),
         ScriptedTurn(tool_calls=(ToolCall('candidate_submit',{'candidate':'flag{PRIVATE_CANDIDATE_SENTINEL}'}),
-            ToolCall('run_complete',{'outcome':'candidate_unverified','candidate_id':'candidate-1',
+            ToolCall('run_complete',{"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', 'outcome':'candidate_unverified','candidate_id':'candidate-1',
                                    'summary':'PRIVATE_SUMMARY_SENTINEL','unresolved':['unknown']}))),
     ]),model_metadata={'provider':'synthetic'},runtime_factory=QuietRuntime)
-    result=service.run(workspace,IMAGE,tmp_path/'runs',RunLimits(max_turns=3))
+    result=service.run(workspace,IMAGE,tmp_path/'runs',RunLimits())
     root=Path(result.run_dir)
     before={p.relative_to(root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*') if p.is_file()}
     with patch('subprocess.Popen',side_effect=AssertionError('diagnosis executed a command')):
@@ -259,10 +260,9 @@ def test_default_run_accepts_more_than_sixty_tool_requests(tmp_path):
     tools = registry(tmp_path)
     model = FakeModelSession([ScriptedTurn(tool_calls=tuple(
         [ToolCall('challenge_list', {'path':'.'}) for _ in range(70)] +
-        [ToolCall('run_complete', {'outcome':'unsolved','summary':'No justified candidate','unresolved':[]})]))])
+        [ToolCall('run_complete', {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', 'outcome':'unsolved','summary':'No justified candidate','unresolved':[]})]))])
     result = AgentLoop(model, tools, tools.evidence).run('authored task')
-    assert RunLimits().max_tool_calls is None
-    assert RunLimits(max_tool_calls=1000).max_tool_calls == 1000
+    assert not hasattr(RunLimits(), "max_tool_calls")
     assert result.status == 'unsolved' and result.tool_calls == 71
     events = [json.loads(line) for line in tools.evidence.events_path.read_text().splitlines()]
     assert not any(e.get('result',{}).get('status')=='budget_denied' for e in events)
@@ -270,17 +270,18 @@ def test_default_run_accepts_more_than_sixty_tool_requests(tmp_path):
     assert finished['call_counts']['observation']=={'requested':70,'admitted':70,'rejected':0}
 
 
-def test_explicit_budget_still_allows_summary_without_hiding_exhaustion(tmp_path):
+def test_tool_count_does_not_block_execution_or_explicit_completion(tmp_path):
     tools = registry(tmp_path)
     model = FakeModelSession([ScriptedTurn(tool_calls=(
         ToolCall('challenge_list', {'path':'.'}),
         ToolCall('command_run', {'argv':['must-not-execute']}),
-        ToolCall('run_complete', {'outcome':'unsolved','summary':'Stopped at explicit budget','unresolved':[]}),
+        ToolCall('run_complete', {"writeup": '# Authored solution\n\nReproduce the recorded fixture steps; outputs and submitted results are preserved in this run.', 'outcome':'unsolved','summary':'Finished without call quota','unresolved':[]}),
     ))])
-    result = AgentLoop(model, tools, tools.evidence, limits=RunLimits(max_tool_calls=1)).run('authored task')
-    assert result.status == 'budget_exhausted' and result.stop_reason == 'budget_exhausted'
-    assert tools.reliability.completion['summary']=='Stopped at explicit budget'
-    assert tools.reliability.budget_feedback['remaining_tool_calls']==0
+    result = AgentLoop(model, tools, tools.evidence, limits=RunLimits()).run('authored task')
+    assert result.status == 'unsolved' and result.stop_reason == 'model_explicit_completion'
+    assert tools.reliability.completion['summary']=='Finished without call quota'
+    assert 'remaining_tool_calls' not in tools.reliability.budget_feedback
+    assert 'tool_call_limit' not in tools.reliability.budget_feedback
 
 
 @pytest.mark.parametrize('content,offset,length', [(b'prefix correct suffix',7,7),(b'{"value":"correct"}',10,7)])

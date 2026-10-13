@@ -71,14 +71,11 @@ def build_parser() -> argparse.ArgumentParser:
     replay.add_argument('--wall-time', type=int, default=300)
     replay_recover = subparsers.add_parser('replay-recover', help='recover owned offline replay containers; retain uncertain Docker requests')
     replay_recover.add_argument('--output', required=True, type=Path)
-    evaluation = subparsers.add_parser('evaluate', help='bounded version-3 candidate workflow evaluation through the shared service (uses model quota)')
+    evaluation = subparsers.add_parser('evaluate', help='version-3 candidate workflow evaluation through the shared service (uses model quota)')
     evaluation.add_argument('--dataset', required=True, type=Path)
     evaluation.add_argument('--development-reference', type=Path)
     evaluation.add_argument('--runtime-image', required=True)
     evaluation.add_argument('--output', required=True, type=Path)
-    evaluation.add_argument('--max-total-turns', required=True, type=int)
-    evaluation.add_argument('--max-total-tool-calls', required=True, type=int)
-    evaluation.add_argument('--max-total-wall-time', type=int, default=3600)
     evaluation.add_argument('--repetitions', type=int, default=1)
     evaluation.add_argument('--confirm-model-usage', action='store_true')
     split = subparsers.add_parser('audit-split', help='compare versioned development/holdout case identities and input hashes')
@@ -109,9 +106,6 @@ def build_parser() -> argparse.ArgumentParser:
     solve.add_argument('--additional-prompt', default='', help='optional solving hints, including any known flag format; no format check is performed')
     solve.add_argument('--runtime-image', required=True, help='tool image pinned by repository digest or sha256 image ID')
     solve.add_argument('--runs-root', default='runs/phase-a', help='private output root (default: runs/phase-a)')
-    solve.add_argument('--max-turns', type=int, default=30)
-    solve.add_argument('--max-tool-calls', type=int, default=None, help='Optional explicit per-run cap; default: unlimited')
-    solve.add_argument('--wall-time', type=int, default=1800, help='maximum run time in seconds')
     solve.add_argument('--confirm-model-usage', action='store_true', help='confirm this command may use model quota')
     subparsers.add_parser('baseline-smoke', help='run the synthetic offline agent-loop acceptance smoke')
     return parser
@@ -175,8 +169,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                                                        remote_grant=args.remote_grant, memory_root=args.memory_root,
                                                        memory_namespaces=tuple(args.memory_namespace), evaluation_mode=args.evaluation_mode)
             result = run_evaluation(dataset_path=args.dataset, service=service, runtime_image=args.runtime_image,
-                                    output=args.output, limits=RunLimits(), max_total_turns=args.max_total_turns,
-                                    max_total_tool_calls=args.max_total_tool_calls, max_total_wall_seconds=args.max_total_wall_time,
+                                    output=args.output, limits=RunLimits(),
                                     repetitions=args.repetitions, development_reference=args.development_reference)
             print(result)
             return 0 if json.loads(result.read_text())['status'] == 'complete' else 1
@@ -283,11 +276,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return 2
             workspace = Path(args.workspace)
             runs_root = Path(args.runs_root)
-            limits = RunLimits(
-                max_turns=args.max_turns,
-                max_tool_calls=args.max_tool_calls,
-                wall_time_seconds=args.wall_time,
-            )
+            limits = RunLimits()
             service = create_codex_application_service(service_profile=args.service_profile,
                                                        remote_profile=args.remote_profile, remote_grant=args.remote_grant,
                                                        memory_root=args.memory_root, memory_namespaces=tuple(args.memory_namespace),
@@ -305,8 +294,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f'Run {result.run_id}: {result.status} ({result.stop_reason})')
         print(f'Turns: {result.turns}; tool calls: {result.tool_calls}')
         print(f'Evidence: {result.run_dir}')
-        if result.status == 'candidate_unverified':
-            print('Attempt completed with an unverified candidate; correctness remains unverified.')
+        if result.status in {'completed', 'candidate_unverified'}:
+            print('Task completed; flags submitted. No platform acceptance is pending.')
+            print(f'Writeup: {Path(result.run_dir) / "writeup.md"}')
             return 0
         return 1
 
